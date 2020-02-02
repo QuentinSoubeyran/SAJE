@@ -26,7 +26,7 @@ $ python -m pip install requirements.txt
 To run the search engine, simply run `main.py`
 
 ```bash
-python main.py
+$ python main.py
 ```
 
 > **NOTE**:
@@ -36,3 +36,9 @@ python main.py
 > $ python --version 
 > ```
 > If the printed version is "Python 2.x.x", try with `python3` and `pip3`
+
+## Using a build
+Builds are not yet availables, you will have to run with your own python for now.
+
+# Contributing
+If you need new functionalities, have found a bug or would like to help improve the search engine, feel free to open an *issue* or to open a *pull request*.
