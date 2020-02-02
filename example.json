@@ -1,0 +1,64 @@
+{
+    "display_string": "<h3 style=\"color: blue\">{name}</h3>\n<b>class:</b> <i>{class}</i>, <b>level:</b> <i>{level}<i/>",
+    "fields": [
+        [
+            {
+                "name": "OPTION class",
+                "type": "Option",
+                "key": "class",
+                "optional": true,
+                "values": [
+                    "magician",
+                    "fighter"
+                ]
+            },
+            {
+                "name": "INTEGER level",
+                "type": "Integer",
+                "key": "level",
+                "optional": true,
+                "lower_bound": true,
+                "min": 1,
+                "max": 30,
+                "listed": [1,11,21]
+            }
+        ],
+        {
+            "name": "TEXT name",
+            "type": "Text",
+            "key": "name"
+        }
+    ],
+    "data": [
+        {
+            "level": 1,
+            "class": "fighter",
+            "name": "feat_0"
+        },
+        {
+            "level": 11,
+            "class": "fighter",
+            "name": "feat_1"
+        },
+        {
+            "level": 21,
+            "class": "fighter",
+            "name": "feat_2"
+        },
+        {
+            "level": 1,
+            "class": "magician",
+            "name": "feat_3"
+        },
+        {
+            "level": 11,
+            "class": "magician",
+            "name": "feat_4"
+        },
+        {
+            "level": 21,
+            "class": "magician",
+            "name": "feat_5"
+        }
+    ]
+}

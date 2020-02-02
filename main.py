@@ -214,9 +214,12 @@ class App(tk.Tk):
         database = jsondb.Database.from_json(
             {"data": json_file["data"], "fields": fields}
         )
+        display_string = json_file.get("display_string")
+        if display_string and jsonpp.Type.of(display_string) is jsonpp.Type.Array:
+            display_string = "".join(display_string)
         return ParsedFile(
             database=database,
-            display_string=json_file.get("display_string"),
+            display_string=display_string,
             fields_geometry=fields_geometry,
         )
 

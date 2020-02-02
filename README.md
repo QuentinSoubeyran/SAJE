@@ -3,7 +3,7 @@ Search in Arbitrary JSON Engine
 
 This project allows to make a graphical application to search on arbitrary data using JSON format. The JSON files containes both the data (a list of arbitrary JSON objects) and how to search on them. The graphic interface is automatically built to allow the search options to be provided values.
 
-See the `example_data.json` for examples and the wiki on how to write the json files.
+See the `example.json` for examples and the wiki on how to write the json files.
 
 # Installing a local copy
 To run the application, you can either download the source code and execute it using python, or use the provided builds (not yet available, this is WIP).
