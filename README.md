@@ -33,6 +33,6 @@ python main.py
 >
 > On unix system (linux and MacOS), your system is likely to use python 2 as the default version and to keep python 3 separate. In which case, you should replace the command `pip` with `pip3` and `python` with `python 3`. If you are unsure, try:
 > ```bash
-$ python --version 
+> $ python --version 
 > ```
 > If the printed version is "Python 2.x.x", try with `python3` and `pip3`
