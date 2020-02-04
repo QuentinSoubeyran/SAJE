@@ -222,7 +222,7 @@ class IntegerField(FieldBase):
         self.min_ = int(min_)
         self.max_ = int(max_)
         self.listed = list(listed)
-    
+
     def bounded_value(self, value):
         if self.min_ is not None and value < self.min_:
             return self.min_

@@ -19,6 +19,7 @@ __status__ = "alpha"
 # keep the type
 set_type = set
 
+
 class JsonTypeError(BaseException):
     pass
 

@@ -36,6 +36,7 @@ ANY_VALUE = "--Any--"
 
 ParsedFile = namedtuple("ParsedFile", ["database", "display_string", "fields_geometry"])
 
+
 class SearchCallback:
     """
     Class to search in the database when the search button is pressed
@@ -63,7 +64,10 @@ class SearchCallback:
     def get_option_args(self, field: jsondb.OptionField, field_gui_container):
         args = {"accept_missing": bool(field_gui_container.accept_na_var.get())}
         if field.multi_selection:
-            selected = field_gui_container.selector.selection()
+            selected = [
+                field_gui_container.selector.item(item)["text"]
+                for item in field_gui_container.selector.selection()
+            ]
             if not selected:
                 return None
             args["value_or_set"] = selected
@@ -318,6 +322,8 @@ class App(tk.Tk):
                 show="tree",
             )
             container.selector.column("#0", width=35)
+            for value in field.values:
+                container.selector.insert("", "end", text=value)
             container.scrollbar = ttk.Scrollbar(
                 container.frame, orient=tk.VERTICAL, command=container.selector.yview
             )
