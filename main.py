@@ -372,7 +372,7 @@ class App(tk.Tk):
         container.option_frame = ttk.Frame(master=container.frame)
         container.accept_na_var = tk.IntVar(container.option_frame, value=True)
         container.accept_na_button = ttk.Checkbutton(
-            master=container.frame,
+            master=container.option_frame,
             text="accept N/A",
             onvalue=1,
             offvalue=0,
