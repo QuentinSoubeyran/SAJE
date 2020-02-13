@@ -5,16 +5,15 @@ Small library that extends python's built-in json library with various utilities
 """
 # Built-in modules
 import enum
-
-from json import *
 from collections.abc import Mapping, Sequence
+from json import *
 
 __author__ = "Quentin Soubeyran"
 __copyright__ = "Copyright 2020, SAJE project"
 __license__ = "MIT"
-__version__ = "0.0.1"
+__version__ = "0.2.0"
 __maintainer__ = "Quentin Soubeyran"
-__status__ = "alpha"
+__status__ = "beta"
 
 # keep the type
 set_type = set
@@ -29,9 +28,13 @@ class Type(enum.Enum):
     Represents the JSON type of a python structure as returned by the json module.
     """
 
-    Object = enum.auto()
-    Array = enum.auto()
-    Value = enum.auto()
+    Object = object()
+    Array = object()
+    Value = object()
+
+    @classmethod
+    def _missing_(cls, value):
+        return cls.of(value)
 
     @staticmethod
     def of(json_obj):
@@ -40,7 +43,11 @@ class Type(enum.Enum):
             return Type.Object
         elif (not isinstance(json_obj, str)) and isinstance(json_obj, Sequence):
             return Type.Array
-        elif isinstance(json_obj, int) or isinstance(json_obj, str):
+        elif (
+            isinstance(json_obj, int)
+            or isinstance(json_obj, str)
+            or isinstance(json_obj, bool)
+        ):
             return Type.Value
         else:
             raise JsonTypeError("Type %s is invalid in JSON" % type(json_obj))
@@ -50,6 +57,9 @@ class Type(enum.Enum):
         if isinstance(json_obj, int) or isinstance(json_obj, float):
             return True
         return False
+
+
+Object, Array, Value = Type.Object, Type.Array, Type.Value
 
 
 def flatten(json_obj: dict):

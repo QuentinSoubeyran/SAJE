@@ -1,5 +1,8 @@
 {
-    "display_string": "<h3 style=\"color: blue\">{name}</h3>\n<b>class:</b> <i>{class}</i>, <b>level:</b> <i>{level}<i/>",
+    "display_string": [
+        "<h3 style=\"color: blue\">{name}</h3>\n",
+        "<b>class:</b> <i>{class}</i>, <b>level:</b> <i>{level}<i/>"
+    ],
     "fields": [
         [
             {
@@ -17,7 +20,7 @@
                 "type": "Integer",
                 "key": "level",
                 "optional": true,
-                "lower_bound": true,
+                "comparison": "<=",
                 "min": 1,
                 "max": 30,
                 "listed": [1,11,21]

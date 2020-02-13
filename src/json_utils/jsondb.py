@@ -11,18 +11,68 @@ certain criteria
 A `Database` represents an association of data and fields to search on that data
 """
 # Built-in modules
+import enum
 import copy
 import warnings
 
 # Local modules
-from . import jsonpp
+from ..json_utils import jsonplus as json
 
 __author__ = "Quentin Soubeyran"
 __copyright__ = "Copyright 2020, SAJE project"
 __license__ = "MIT"
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 __maintainer__ = "Quentin Soubeyran"
-__status__ = "alpha"
+__status__ = "beta"
+
+
+class ValueSet(set):
+    pass
+
+
+class Comparison(enum.Enum):
+    LT = (("lt", "<"), lambda x, y: x < y)
+    LEQ = (("leq", "<="), lambda x, y: x <= y)
+    EQ = (("eq", "=", "=="), lambda x, y: x == y)
+    NEQ = (("neq", "!="), lambda x,y: x!=y)
+    GEQ = (("geq", ">="), lambda x, y: x >= y)
+    GT = (("gt", ">"), lambda x, y: x > y)
+
+    def __new__(cls, aliases, function):
+        obj = object.__new__(cls)
+        obj._value_ = aliases[-1]
+        obj.aliases = aliases
+        obj.compare = function
+        return obj
+
+    @classmethod
+    def _missing_(cls, value):
+        s = str(value).lower()
+        for member in cls:
+            if s in member.aliases:
+                return member
+
+
+class Operator(enum.Enum):
+    AND = (("and", "all"), all)
+    OR = (("or", "any"), any)
+
+    def __new__(cls, aliases, function):
+        obj = object.__new__(cls)
+        obj._value_ = aliases[0]
+        obj.aliases = aliases
+        obj.function = function
+        return obj
+    
+    def __call__(self, *args, **kwargs):
+        return self.function(*args, **kwargs)
+
+    @classmethod
+    def _missing_(cls, value):
+        string = str(value).lower()
+        for member in cls:
+            if string in member.aliases:
+                return member
 
 
 class FieldBase:
@@ -35,6 +85,13 @@ class FieldBase:
     CLASSES = {}
     KEY_TRANSLATION = {}
     TYPE = None
+
+    def __init_subclass__(cls, **kwargs):
+        """
+        Register subclasses into the CLASSES attribute, under the key subclass.TYPE
+        """
+        super().__init_subclass__(**kwargs)
+        cls.CLASSES[cls.TYPE] = cls
 
     def __init__(self, key, optional=True):
         """
@@ -61,8 +118,8 @@ class FieldBase:
         Returns:
             True if the object passes the test, false otherwise
         """
-        if jsonpp.has(json_obj, self.key):
-            return self.test(jsonpp.get(json_obj, self.key), **kwargs)
+        if json.has(json_obj, self.key):
+            return self.test(json.get(json_obj, self.key), **kwargs)
         else:
             return accept_missing
 
@@ -108,7 +165,7 @@ class FieldBase:
         Returns:
             A object of a subclass of FieldBase as defined by the value of the `type` key of the object
         """
-        if jsonpp.Type.of(json_repr) is not jsonpp.Type.Object:
+        if json.Type(json_repr) is not json.Object:
             raise ValueError("Invalid field json representation: must be a json object")
         if "type" not in json_repr:
             raise ValueError("Invalid field json representation: must have key `type`")
@@ -139,28 +196,22 @@ class OptionField(FieldBase):
 
     TYPE = "Option"
 
-    def __init__(self, key, values=[], multi_selection=False, optional=True):
+    def __init__(self, key, values=[], optional=True):
         super().__init__(key, optional=optional)
         self.values = set(values)
-        self.multi_selection = multi_selection
 
-    def test(self, json_value, value_or_set):
+    def test(self, json_value, valid_values):
         """
         Test if the json value is (one of) the valid value(s)
 
         Args:
             json_value  : the json value to test (taken by FieldBase from the object to test)
-            value_or_set: depending of the value of self.multi_selection, a single value OR an Iterable of values
+            valid_values: either a single value, or a set of values as a ValueSet object
         
         Return:
             True if json_value is (one of) the valid value, False otherwise
-
-        Warning:
-            if self.multi_selection is True, value_or_set *must* be an iterable of values, even if
-                only one is valid
         """
-        if self.multi_selection:
-            valid_values = set(value_or_set)
+        if isinstance(valid_values, ValueSet):
             unkown_values = valid_values - set(self.values)
             if unkown_values:
                 raise ValueError(
@@ -169,22 +220,20 @@ class OptionField(FieldBase):
                 )
             return json_value in valid_values
         else:
-            if value_or_set not in self.values:
+            if valid_values not in self.values:
                 raise ValueError(
-                    "Invalid value %s: must be in %s" % (value_or_set, self.values)
+                    "Invalid value %s: must be in %s" % (valid_values, self.values)
                 )
-            return json_value == value_or_set
+            return json_value == valid_values
 
     def _add_json_values(self, json_repr):
         json_repr["values"] = list(self.values)
-        if self.multi_selection:
-            json_repr["multi_selection"] = True
 
     # TODO: implement _make, using all the available values in the actual data
     #   as the value set
 
 
-FieldBase.CLASSES["Option"] = OptionField
+# FieldBase.CLASSES[OptionField.TYPE] = OptionField
 
 
 class IntegerField(FieldBase):
@@ -195,33 +244,17 @@ class IntegerField(FieldBase):
     TYPE = "Integer"
     KEY_TRANSLATION = {"min": "min_", "max": "max_"}
 
-    def __init__(
-        self,
-        key,
-        min_=None,
-        max_=None,
-        listed=[],
-        optional=True,
-        lower_bound=False,
-        upper_bound=False,
-    ):
+    def __init__(self, key, min_=None, max_=None, optional=True):
         """
         Create a new IntegerField object. See FieldBase.__init__ for arguments
 
         Args:
             min_    : minimum value this field can compare against
             max_    : maximum value this field can compare against
-            listed  : unsed, used for GUI implementation pruposes. The list
-                of value to propose with a drop-down menu for instance
         """
-        if lower_bound and upper_bound:
-            lower_bound = upper_bound = False
         super().__init__(key, optional=optional)
-        self.upper_bound = bool(upper_bound)
-        self.lower_bound = bool(lower_bound)
-        self.min_ = int(min_)
-        self.max_ = int(max_)
-        self.listed = list(listed)
+        self.min_ = int(min_) if min_ is not None else None
+        self.max_ = int(max_) if max_ is not None else None
 
     def bounded_value(self, value):
         if self.min_ is not None and value < self.min_:
@@ -230,34 +263,32 @@ class IntegerField(FieldBase):
             return self.max_
         return value
 
-    def test(self, json_value, value):
+    def test(self, json_value, value, comparison: Comparison = Comparison.EQ):
+        """
+        test if `json_value` fulfills this search field
+
+        Args:
+            value: the value to compare the json_value against
+            comparison (optional): the comparison operation to use
+                the comparison is json_value OPS value
+        """
         value = int(value)
         if self.min_ is not None and value < self.min_:
             raise ValueError("Invalid value %s: must be >= %s" % (value, self.min_))
         if self.max_ is not None and value > self.max_:
             raise ValueError("Invalid value %s: must be <= %s" % (value, self.max_))
-        if self.lower_bound:
-            return json_value >= value
-        elif self.upper_bound:
-            return json_value <= value
-        else:
-            return json_value == value
+        comparison = Comparison(comparison) #pylint: disable=no-value-for-parameter
+        return comparison.compare(json_value, value) 
 
     def _add_json_values(self, json_repr):
         if self.min_ is not None:
             json_repr["min"] = self.min_
         if self.max_ is not None:
             json_repr["max"] = self.max_
-        if self.lower_bound:
-            json_repr["lower_bound"] = True
-        if self.upper_bound:
-            json_repr["upper_bound"] = True
-        if self.listed:
-            json_repr["listed"] = self.listed
 
 
 # Registed Parser
-FieldBase.CLASSES["Integer"] = IntegerField
+# FieldBase.CLASSES[IntegerField.TYPE] = IntegerField
 
 
 class TextField(FieldBase):
@@ -266,10 +297,8 @@ class TextField(FieldBase):
     """
 
     TYPE = "Text"
-    OR = any
-    AND = all
 
-    def test(self, json_value, value, operator=OR):
+    def test(self, json_value, value, operator: Operator = Operator.OR):
         """
         Test if any/all subtexts are in the json value
 
@@ -278,14 +307,11 @@ class TextField(FieldBase):
             operator: TextField.OR, TextField.AND, "and" or "or", whether to require
                 all substring (AND) or any substring (OR)
         """
-        if operator in ("AND", "And", "and", "ALL", "All", "all"):
-            operator = TextField.AND
-        elif operator in ("OR", "Or", "or", "ANY", "Any", "any"):
-            operator = TextField.OR
-        return operator(subtxt in json_value for subtxt in value)
+        ops = Operator(operator) #pylint: disable=no-value-for-parameter
+        return ops(subtxt in json_value for subtxt in value)
 
 
-FieldBase.CLASSES["Text"] = TextField
+# FieldBase.CLASSES[TextField.TYPE] = TextField
 
 
 class Database:
@@ -305,13 +331,19 @@ class Database:
         self.data = data
         self.fields = fields
 
-    def search(self, criteria):
+    def search(self, criteria, operator: Operator = Operator.AND):
         """
         Searches the database
 
         Args:
-            criteria: mapping from field names to dictionary of keyword argument
-                for there `test` method
+            criteria: mapping from field names to dictionary of keyword arguments
+                for their `test` method
+            operator (optional): the operator to use between the field return values
+                Operator.AND (default): all fields must be fullfilled
+                Operator.OR           : a single field suffice
+            
+        Returns:
+            A list of item from the data that fullfills the search
         """
         for field_name, field in self.fields.items():
             if not field.optional and field_name not in criteria:
@@ -323,15 +355,16 @@ class Database:
         field_kwargs = [
             (self.fields[field_name], kwargs) for field_name, kwargs in criteria.items()
         ]
+        ops = Operator(operator) #pylint: disable=no-value-for-parameter
         return [
             json_obj
             for json_obj in self.data
-            if all(field.compare(json_obj, **kwargs) for field, kwargs in field_kwargs)
+            if ops(field.compare(json_obj, **kwargs) for field, kwargs in field_kwargs)
         ]
 
     @staticmethod
     def from_json(json_db):
-        if jsonpp.Type.of(json_db) is not jsonpp.Type.Object:
+        if json.Type(json_db) is not json.Object:
             raise ValueError("Json representation of database must be a Json object")
         if "data" not in json_db:
             raise ValueError("Json representation of database has no `data` member")
@@ -340,18 +373,18 @@ class Database:
         for name in set(json_db.keys()) - set(["data", "fields"]):
             warnings.warn("Unused key '%s' in json representation of database" % name)
         raw_data = json_db["data"]
-        type_ = jsonpp.Type.of(raw_data)
-        if type_ not in (jsonpp.Type.Array, jsonpp.Type.Object):
+        type_ = json.Type(raw_data)
+        if type_ not in (json.Array, json.Object):
             raise ValueError(
                 "Invalid json DB: `data` key must have type json array or object"
             )
         data = []
-        if type_ is jsonpp.Type.Array:
+        if type_ is json.Array:
             raw_data_iter = enumerate(raw_data)
         else:
             raw_data_iter = raw_data.items()
         for name, json_obj in raw_data_iter:
-            if jsonpp.Type.of(json_obj) is not jsonpp.Type.Object:
+            if json.Type(json_obj) is not json.Object:
                 warnings.warn(
                     "Invalid data element %s in json db: should be a json object, was ignored"
                     % name
