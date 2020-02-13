@@ -27,6 +27,17 @@
             }
         ],
         {
+                "name": "MULTIOPTION class",
+                "type": "Option",
+                "key": "class",
+                "optional": true,
+                "multi_selection": true,
+                "values": [
+                    "magician",
+                    "fighter"
+                ]
+            },
+        {
             "name": "TEXT name",
             "type": "Text",
             "key": "name"

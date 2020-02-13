@@ -4,6 +4,7 @@
 Tkinter backend for SAJE project
 """
 # Built-in modules
+import math
 import logging
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -39,10 +40,11 @@ class MultiSelector(ttk.Treeview):
 
     def __init__(self, values, master, *args, **kwargs):
         self.frame_ = ttk.Frame(master=master)
-        super().__init__(*args, master=self.frame_, show="tree", columns=[], **kwargs)
+        super().__init__(*args, master=self.frame_, show="", columns=["value"], **kwargs)
         self.bind("<1>", self.on_click)
         for value in values:
-            self.insert("", "end", text=value)
+            self.insert("", "end", values=(value,))
+        self.column("#1", width=math.ceil(8*max(len(v) for v in values)))
         self.scrollbar_ = ttk.Scrollbar(
             master=self.frame_, orient=tk.VERTICAL, command=self.yview
         )
@@ -56,7 +58,7 @@ class MultiSelector(ttk.Treeview):
         """
         Returns the selected element from the `values` passed to `__init__()`
         """
-        return [self.item(item)["text"] for item in self.selection()]
+        return [self.item(item)["values"][0] for item in self.selection()]
 
     def on_click(self, event):
         """
@@ -144,7 +146,7 @@ class TkOptionGui(TkFieldGui):
             self.selector = MultiSelector(
                 values=gui_data.field_spec["values"], master=self, height=5
             )
-            self.selector.column("#0", width=35)
+            #self.selector.column("#0", width=35)
         else:
             values = gui_data.field_spec["values"].copy()
             if field.optional:
