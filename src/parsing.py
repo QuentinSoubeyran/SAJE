@@ -86,6 +86,7 @@ class OptionGuiData(GuiDataBase):
     def __init__(self, json_obj):
         super().__init__(json_obj)
         self.multi_selection = json_obj.pop("multi_selection", False)
+        self.operator = json_obj.pop("operator", "or")
         self.field_spec = json_obj
 
 

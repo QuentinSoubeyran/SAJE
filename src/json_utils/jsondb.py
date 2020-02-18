@@ -200,7 +200,7 @@ class OptionField(FieldBase):
         super().__init__(key, optional=optional)
         self.values = set(values)
 
-    def test(self, json_value, valid_values):
+    def test(self, json_value, valid_values, operator: Operator= Operator.OR):
         """
         Test if the json value is (one of) the valid value(s)
 
@@ -218,13 +218,28 @@ class OptionField(FieldBase):
                     "Invalid test values %s, must be included in %s"
                     % (unkown_values, self.values)
                 )
-            return json_value in valid_values
+            if json.Type(json_value) is json.Value:
+                return json_value in valid_values
+            else:
+                values = set(json_value if json.Type(json_value) is json.Array else json_value.values())
+                match = values & valid_values
+                ops = Operator(operator) #pylint: disable=no-value-for-parameter
+                if ops is Operator.OR:
+                    return bool(match)
+                elif ops is Operator.AND:
+                    return match == valid_values
+                else:
+                    raise TypeError("Unhandled Operator in OptionField test() method")
         else:
             if valid_values not in self.values:
                 raise ValueError(
                     "Invalid value %s: must be in %s" % (valid_values, self.values)
                 )
-            return json_value == valid_values
+            if json.Type(json_value) is json.Value:
+                return json_value == valid_values
+            else:
+                values = set(json_value if json.Type(json_value) is json.Array else json_value.values())
+                return valid_values in values
 
     def _add_json_values(self, json_repr):
         json_repr["values"] = list(self.values)

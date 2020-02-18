@@ -156,7 +156,10 @@ class TkOptionGui(TkFieldGui):
         self.selector.pack(side="top")
 
     def get_kwargs(self):
-        args = {"accept_missing": self.accept_na_var.get()}
+        args = {
+            "accept_missing": self.accept_na_var.get(),
+            "operator": self.gui_data.operator
+        }
         if self.gui_data.multi_selection:
             args["valid_values"] = jsondb.ValueSet(self.selector.get_selection())
         else:
