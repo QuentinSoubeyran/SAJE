@@ -29,12 +29,11 @@ __status__ = "beta"
 class ValueSet(set):
     pass
 
-
 class Comparison(enum.Enum):
     LT = (("lt", "<"), lambda x, y: x < y)
     LEQ = (("leq", "<="), lambda x, y: x <= y)
     EQ = (("eq", "=", "=="), lambda x, y: x == y)
-    NEQ = (("neq", "!="), lambda x,y: x!=y)
+    NEQ = (("neq", "!="), lambda x,y: x != y)
     GEQ = (("geq", ">="), lambda x, y: x >= y)
     GT = (("gt", ">"), lambda x, y: x > y)
 
@@ -44,6 +43,9 @@ class Comparison(enum.Enum):
         obj.aliases = aliases
         obj.compare = function
         return obj
+    
+    def __call__(self, *args, **kwargs):
+        return self.compare(*args, **kwargs)
 
     @classmethod
     def _missing_(cls, value):

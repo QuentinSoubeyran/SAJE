@@ -1,4 +1,5 @@
 {
+    "version": "0.1.0",
     "display_string": [
         "<h3 style=\"color: blue\">{name}</h3>\n",
         "<b>class:</b> <i>{class}</i>, <b>level:</b> <i>{level}<i/>"

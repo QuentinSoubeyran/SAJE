@@ -38,18 +38,26 @@ class MultiSelector(ttk.Treeview):
     Widget to select/deselect multiple element in a list, with a scrollbar
     """
 
-    def __init__(self, values, master, *args, **kwargs):
+    def __init__(self, values, master, *args, height=5, **kwargs):
         self.frame_ = ttk.Frame(master=master)
-        super().__init__(*args, master=self.frame_, show="", columns=["value"], **kwargs)
+        super().__init__(
+            *args,
+            master=self.frame_,
+            show="",
+            columns=["value"],
+            height=min(len(values), height),
+            **kwargs
+        )
         self.bind("<1>", self.on_click)
         for value in values:
             self.insert("", "end", values=(value,))
-        self.column("#1", width=math.ceil(8*max(len(v) for v in values)))
-        self.scrollbar_ = ttk.Scrollbar(
-            master=self.frame_, orient=tk.VERTICAL, command=self.yview
-        )
-        self.configure(yscrollcommand=self.scrollbar_.set)
-        self.scrollbar_.pack(side="right", expand=True, fill="y")
+        self.column("#1", width=math.ceil(8 * max(len(v) for v in values)))
+        if height < len(values):
+            self.scrollbar_ = ttk.Scrollbar(
+                master=self.frame_, orient=tk.VERTICAL, command=self.yview
+            )
+            self.configure(yscrollcommand=self.scrollbar_.set)
+            self.scrollbar_.pack(side="right", expand=True, fill="y")
         self.pack(side="left", expand=True, fill="both")
         self.pack = self.frame_.pack
         self.grid = self.frame_.grid
@@ -146,7 +154,7 @@ class TkOptionGui(TkFieldGui):
             self.selector = MultiSelector(
                 values=gui_data.field_spec["values"], master=self, height=5
             )
-            #self.selector.column("#0", width=35)
+            # self.selector.column("#0", width=35)
         else:
             values = gui_data.field_spec["values"].copy()
             if field.optional:
@@ -158,7 +166,7 @@ class TkOptionGui(TkFieldGui):
     def get_kwargs(self):
         args = {
             "accept_missing": self.accept_na_var.get(),
-            "operator": self.gui_data.operator
+            "operator": self.gui_data.operator,
         }
         if self.gui_data.multi_selection:
             args["valid_values"] = jsondb.ValueSet(self.selector.get_selection())
@@ -298,7 +306,7 @@ class MainApp(common.AbstractMainApp, tk.Tk):
 
     def new_tab(self, parsed_file: parsing.ParsedFile):
         """
-        Create a new tab - TODO
+        Create a new tab
         """
         tab = DotMap()
         # Main frame

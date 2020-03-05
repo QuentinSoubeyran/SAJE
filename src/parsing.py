@@ -5,6 +5,7 @@ Module for file parsing utilities of the SAJE project
 """
 # Built-in modules
 from collections import namedtuple
+from abc import ABC, abstractmethod
 
 # Local modules
 from . import version
@@ -21,40 +22,169 @@ __status__ = version.__status__
 CACHE_KEY = "__CACHED_DISPLAY_STRING__"
 
 ParsedFile = namedtuple(
-    "ParsedFile", ["database", "display_string", "gui_geometry", "gui_datas"]
+    "ParsedFile", ["name", "display_string", "gui_geometry", "gui_datas", "database"]
 )
 
 
-def parse_file(json_file):
+class DisplayString(ABC):
+    """
+    Class for handling display string format
+    """
+
+    CLASSES = []
+    KEYWORDS = None
+
+    def __init_subclass__(cls, **kwargs):
+        """
+        Register subclasses into the CLASSES attribute, under the key subclass.TYPE
+        """
+        super().__init_subclass__(**kwargs)
+        if cls.KEYWORDS is not None:
+            cls.CLASSES.append((cls.KEYWORDS, cls))
+
+    @classmethod
+    def from_json(cls, json_obj):
+        if json_obj is None:
+            return DefaultDS()
+        type_ = json.Type(json_obj)
+        if type_ is json.Value:
+            return StringDS(json_obj)
+        elif type_ is json.Array:
+            return ArrayDS(json_obj)
+        elif type_ is json.Object:
+            json_kw = set(json_obj)
+            for keywords, class_ in cls.CLASSES:
+                if keywords & json_kw == keywords:
+                    return class_(json_obj)
+            raise ValueError(
+                "No display_string object matches the keywords %s" % json_kw
+            )
+
+    @abstractmethod
+    def format(self, json_obj):
+        """
+        Returns the display string for the passed json object
+        """
+
+
+class DefaultDS(DisplayString):
+    def format(self, json_obj):
+        return json.dumps(json_obj, indent=2)
+
+
+class StringDS(DisplayString):
+    """
+    Handles formating a final string
+    """
+
+    def __init__(self, string):
+        self.string = str(string)
+
+    def format(self, json_obj):
+        type_ = json.Type(json_obj)
+        if type_ is json.Object:
+            return self.string.format(
+                **{".".join(str(k) for k in key): value for (key, value) in json.flatten(json_obj)}
+            )
+        elif type_ is json.Array:
+            return self.string.format(json_obj)
+        else:
+            return self.string.format(value=json_obj)
+
+
+class ArrayDS(DisplayString):
+    """
+    Handles concatenating a json-array of display strings
+    """
+
+    def __init__(self, json_obj):
+        self.display_strings = [self.from_json(sub_json) for sub_json in json_obj]
+
+    def format(self, json_obj):
+        return "".join(ds.format(json_obj) for ds in self.display_strings)
+
+
+class TableDS(DisplayString):
+    """
+    Handles switching based on the value of a key
+    Empty string is used as a default route
+    """
+
+    KEYWORDS = {"key", "table"}
+
+    def __init__(self, json_obj):
+        self.key = json_obj["key"]
+        self.table = {
+            key: self.from_json(display_string)
+            for key, display_string in json_obj["table"].items()
+        }
+        if "" not in self.table:
+            raise ValueError(
+                "table display_string requires a default under the empty key"
+            )
+
+    def format(self, json_obj):
+        if json.has(json_obj, self.key):
+            value = json.get(json_obj, self.key)
+            if value in self.table:
+                return self.table[value].format(json_obj)
+        return self.table[""].format(json_obj)
+
+
+class ForallDS(DisplayString):
+    """
+    Handles a for loop on sub-items
+    """
+
+    KEYWORDS = {"forall", "display_string"}
+
+    def __init__(self, json_obj):
+        self.key = json_obj["forall"]
+        self.display_string = self.from_json(json_obj["display_string"])
+        self.sep = json_obj.get("separator", "")
+
+    def format(self, json_obj):
+        if json.has(json_obj, self.key):
+            return self.sep.join(
+                self.display_string.format(sub_json)
+                for sub_json in json.get(json_obj, self.key)
+            )
+        return ""
+
+
+def parse_file(json_file, filename):
     """
     Parses a JSON file that was just loaded, and return a ParsedFile object, ready for
     use to create a GUI and search the data
     """
+    json_version = json_file.get("version", None)
+    if json_version is None:
+        raise ValueError("File %s has no version" % filename)
+    prog_ver = version.__version__.split(".")
+    json_ver = json_version.split(".")
+    if prog_ver[0] != json_ver[0] or prog_ver[1] < json_ver[1]:
+        raise ValueError(
+            "SAJE version %s cannot load format from version %s"
+            % (version.__version__, json_version)
+        )
     field_dict, field_geometry = parse_nested_fields(
         field_dict={}, field_geometry=[], field_nested_list=json_file["fields"]
     )
-    display_string = json_file.get("display_string")
-    if display_string and json.Type(display_string) is json.Array:
-        display_string = "".join(display_string)
     fields = {name: gui_data.field_spec for name, gui_data in field_dict.items()}
     return ParsedFile(
+        name=json_file.get("name", filename),
+        display_string=DisplayString.from_json(json_file.get("display_string")),
+        gui_geometry=field_geometry,
+        gui_datas=field_dict,
         database=jsondb.Database.from_json(
             {"fields": fields, "data": json_file["data"]}
         ),
-        display_string=display_string,
-        gui_geometry=field_geometry,
-        gui_datas=field_dict,
     )
 
 
 def get_display(display_string, json_obj):
     if CACHE_KEY not in json_obj:
-        if display_string is not None:
-            json_obj[CACHE_KEY] = display_string.format(
-                **{".".join(key): value for key, value in json.flatten(json_obj)}
-            )
-        else:
-            json_obj[CACHE_KEY] = json.dumps(json_obj, indent=2)
+        json_obj[CACHE_KEY] = display_string.format(json_obj)
     return json_obj[CACHE_KEY]
 
 

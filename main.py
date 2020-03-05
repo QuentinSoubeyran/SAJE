@@ -100,7 +100,7 @@ class SAJE(backend.MainApp):
                 )
                 return
             try:
-                self.cached_files[file_id] = parsing.parse_file(json_file)
+                self.cached_files[file_id] = parsing.parse_file(json_file, filename=path.stem)
             except Exception as err:
                 LOGGER.error(
                     "Couldn't parse file %s. Stacktrace:\n%s\n%s",
@@ -129,8 +129,9 @@ class SAJE(backend.MainApp):
                 message="Couldn't create the new tab\n%s" % utils.err_str(err),
             )
             return
-        self.notebook.add_tab(tab, title=path.stem)
+        self.notebook.add_tab(tab, title=parsed_file.name)
 
 
 saje = SAJE()
+saje.set_title("SAJE %s (%s backend)" % (version.__version__, PREFS["backend"]))
 saje.start()
