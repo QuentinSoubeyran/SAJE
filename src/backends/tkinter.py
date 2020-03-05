@@ -33,6 +33,16 @@ DEFAULT_SIZE = (640, 480)  # width, height
 VALUE_ANY = "--Any--"
 
 
+class Dropdown(ttk.Combobox):
+    def __init__(self, master, values, *args, interactive=True, **kwargs):
+        state = "readonly" if not interactive else None
+        width = max(len(str(v)) for v in values) + 1
+        super().__init__(
+            master, *args, state=state, values=values, width=width, **kwargs
+        )
+        self.set(values[0])
+
+
 class MultiSelector(ttk.Treeview):
     """
     Widget to select/deselect multiple element in a list, with a scrollbar
@@ -51,7 +61,21 @@ class MultiSelector(ttk.Treeview):
         self.bind("<1>", self.on_click)
         for value in values:
             self.insert("", "end", values=(value,))
-        self.column("#1", width=math.ceil(8 * max(len(v) for v in values)))
+        self.column("#1", width=8 * max(len(v) for v in values))
+        self.button_frame = ttk.Frame(master=self.frame_)
+        self.button_all = ttk.Button(
+            master=self.button_frame, text="All", command=self.select_all
+        )
+        self.button_clear = ttk.Button(
+            master=self.button_frame, text="Clear", command=self.select_clear
+        )
+        self.button_toggle = ttk.Button(
+            master=self.button_frame, text="Toggle", command=self.select_toggle
+        )
+        self.button_frame.pack(side="bottom")
+        self.button_all.pack(side="left")
+        self.button_clear.pack(side="left")
+        self.button_toggle.pack(side="left")
         if height < len(values):
             self.scrollbar_ = ttk.Scrollbar(
                 master=self.frame_, orient=tk.VERTICAL, command=self.yview
@@ -81,16 +105,33 @@ class MultiSelector(ttk.Treeview):
                 self.selection_add(item)
             return "break"
 
+    def select_all(self):
+        """
+        Select all items
+        """
+        self.selection_add(*self.get_children())
+    
+    def select_clear(self):
+        """
+        Deselect all items
+        """
+        self.selection_remove(*self.get_children())
+    
+    def select_toggle(self):
+        """
+        Toggle the selection of all items
+        """
+        self.selection_toggle(*self.get_children())
+
 
 class TkSearchButton(common.AbstractKwargsProvider, ttk.Frame):
     def __init__(self, master):
         super().__init__(master=master)
         self.button = ttk.Button(master=self, text="Search")
         self.mode_label = ttk.Label(master=self, text="criteria to fulfill: ")
-        self.mode_selector = ttk.Combobox(
-            master=self, values=("All", "Any"), state="readonly"
+        self.mode_selector = Dropdown(
+            master=self, values=("All", "Any"), interactive=False
         )
-        self.mode_selector.set("All")
         self.button.pack(side="left")
         self.mode_label.pack(side="left")
         self.mode_selector.pack(side="left")
@@ -154,13 +195,11 @@ class TkOptionGui(TkFieldGui):
             self.selector = MultiSelector(
                 values=gui_data.field_spec["values"], master=self, height=5
             )
-            # self.selector.column("#0", width=35)
         else:
             values = gui_data.field_spec["values"].copy()
             if field.optional:
                 values = [VALUE_ANY] + values
-            self.selector_var = tk.StringVar(master=self, value=values[0])
-            self.selector = ttk.OptionMenu(self, self.selector_var, values[0], *values)
+            self.selector = Dropdown(master=self, values=values, interactive=False)
         self.selector.pack(side="top")
 
     def get_kwargs(self):
@@ -171,13 +210,10 @@ class TkOptionGui(TkFieldGui):
         if self.gui_data.multi_selection:
             args["valid_values"] = jsondb.ValueSet(self.selector.get_selection())
         else:
-            args["valid_values"] = self.selector_var.get()
+            args["valid_values"] = self.selector.get()
         if not args["valid_values"] or args["valid_values"] == VALUE_ANY:
             return None
         return args
-
-
-# TkFieldGui.CLASSES[parsing.OptionGuiData] = TkOptionGui
 
 
 class TkIntegerGui(TkFieldGui):
@@ -197,7 +233,7 @@ class TkIntegerGui(TkFieldGui):
         values = list(gui_data.listed)
         if field.optional:
             values = [VALUE_ANY] + values
-        self.selector = ttk.Combobox(master=self, values=values)
+        self.selector = Dropdown(master=self, values=values)
         if field.optional:
             self.selector.set(VALUE_ANY)
         else:
@@ -226,10 +262,11 @@ class TkTextGui(TkFieldGui):
     def __init__(self, master, gui_data: parsing.TextGuiData, field: jsondb.TextField):
         super().__init__(master, gui_data, field)
         self.mode_label = ttk.Label(master=self.config_frame, text="required lines:")
-        self.mode_selector = ttk.Combobox(
-            master=self.config_frame, values=("Any", "All"), state="readonly"
+        self.mode_selector = Dropdown(
+            master=self.config_frame,
+            values=("Any", "All"),
+            interactive=False, 
         )
-        self.mode_selector.set("Any")
         self.selector = tk.Text(master=self, wrap="word", height=5, width=30)
         self.label.pack(side="top", fill="x")
         self.accept_na_button.pack(side="left")
