@@ -84,7 +84,7 @@ class SAJE(backend.MainApp):
         file_id = str(path.absolute())
         if file_id not in self.cached_files:
             try:
-                with path.open("r") as f:
+                with path.open("r", encoding="utf8") as f:
                     json_file = json.load(f)
             except Exception as err:
                 LOGGER.error(
