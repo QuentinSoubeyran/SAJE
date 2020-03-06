@@ -49,6 +49,19 @@ else:
     except Exception as err:
         LOGGER.error("Couldn't create preference file due to:\n%s", utils.err_str(err))
 
+overwrite = False
+for prefkey, prefvalue in DEFAULT_PREFS.items():
+    if prefkey not in PREFS:
+        LOGGER.warning("No preferences for '%s', falling back to %s" % (prefkey, prefvalue))
+        PREFS[prefkey] = prefvalue
+        overwrite = True
+if overwrite:
+    try:
+        with CONFIG_FILE.open("w") as f:
+            json.dump(PREFS, f, indent=4, sort_keys=True)
+    except Exception as err:
+        LOGGER.error("Couldn't save preferences:\n%s", utils.err_str(err))
+
 # Load the actual backend
 if PREFS["backend"] not in backends.BACKENDS:
     LOGGER.error(
