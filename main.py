@@ -146,6 +146,6 @@ class SAJE(backend.MainApp):
 
 
 saje = SAJE()
-saje.set_title("SAJE %s (%s backend)" % (version.__version__, PREFS["backend"]))
+saje.set_title("SAJE: Search in Arbitrary Json Engine - v%s" % (version.__version__))
 saje.tk.call('tk', 'scaling', 2.0)
 saje.start()
