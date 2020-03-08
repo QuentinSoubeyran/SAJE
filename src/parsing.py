@@ -84,7 +84,10 @@ class StringDS(DisplayString):
         type_ = json.Type(json_obj)
         if type_ is json.Object:
             return self.string.format(
-                **{".".join(str(k) for k in key): value for (key, value) in json.flatten(json_obj)}
+                **{
+                    ".".join(str(k) for k in key): value
+                    for (key, value) in json.flatten(json_obj)
+                }
             )
         elif type_ is json.Array:
             return self.string.format(json_obj)

@@ -110,13 +110,13 @@ class MultiSelector(ttk.Treeview):
         Select all items
         """
         self.selection_add(*self.get_children())
-    
+
     def select_clear(self):
         """
         Deselect all items
         """
         self.selection_remove(*self.get_children())
-    
+
     def select_toggle(self):
         """
         Toggle the selection of all items
@@ -170,7 +170,7 @@ class TkFieldGui(common.AbstractKwargsProvider, ttk.Frame):
             variable=self.accept_na_var,
         )
         self.accept_na_var.set(True)
-    
+
     def pack_configs(self, widgets_groups):
         """
         Packs from left to right the option widgets, adding separator between groups
@@ -181,11 +181,12 @@ class TkFieldGui(common.AbstractKwargsProvider, ttk.Frame):
         previous = False
         for group in widgets_groups:
             if previous:
-                ttk.Separator(self.config_frame, orient=tk.VERTICAL).pack(side="left", fill="y", expand=True)
+                ttk.Separator(self.config_frame, orient=tk.VERTICAL).pack(
+                    side="left", fill="y", expand=True
+                )
             for widget in group:
                 widget.pack(side="left")
             previous = True
-
 
     @classmethod
     def make(cls, master, gui_data: parsing.GuiDataBase, field: jsondb.FieldBase):
@@ -276,16 +277,13 @@ class TkTextGui(TkFieldGui):
         super().__init__(master, gui_data, field)
         self.mode_label = ttk.Label(master=self.config_frame, text="required lines:")
         self.mode_selector = Dropdown(
-            master=self.config_frame,
-            values=("Any", "All"),
-            interactive=False, 
+            master=self.config_frame, values=("Any", "All"), interactive=False,
         )
         self.selector = tk.Text(master=self, wrap="word", height=5, width=30)
         self.label.pack(side="top", fill="x")
-        self.pack_configs([
-            [self.accept_na_button],
-            [self.mode_label, self.mode_selector]
-        ])
+        self.pack_configs(
+            [[self.accept_na_button], [self.mode_label, self.mode_selector]]
+        )
         self.config_frame.pack(side="top")
         self.selector.pack(side="top")
 
@@ -368,7 +366,7 @@ class MainApp(common.AbstractMainApp, tk.Tk):
         tab.search.pack(side="left", expand=True, fill="y")
         tab.result.pack(side="right", expand=True, fill="both")
         # Result Area Content
-        tab.display = TkHTMLDisplay(master=tab.result, wrap="word", state="disabled")
+        tab.display = TkHTMLDisplay(master=tab.result, wrap="word", state="disabled",)
         tab.display.pack(side="left", expand=True, fill="both")
         # Search Area content
         ## Search Button

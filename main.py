@@ -52,7 +52,9 @@ else:
 overwrite = False
 for prefkey, prefvalue in DEFAULT_PREFS.items():
     if prefkey not in PREFS:
-        LOGGER.warning("No preferences for '%s', falling back to %s" % (prefkey, prefvalue))
+        LOGGER.warning(
+            "No preferences for '%s', falling back to %s" % (prefkey, prefvalue)
+        )
         PREFS[prefkey] = prefvalue
         overwrite = True
 if overwrite:
@@ -113,7 +115,9 @@ class SAJE(backend.MainApp):
                 )
                 return
             try:
-                self.cached_files[file_id] = parsing.parse_file(json_file, filename=path.stem)
+                self.cached_files[file_id] = parsing.parse_file(
+                    json_file, filename=path.stem
+                )
             except Exception as err:
                 LOGGER.error(
                     "Couldn't parse file %s. Stacktrace:\n%s\n%s",
@@ -147,5 +151,5 @@ class SAJE(backend.MainApp):
 
 saje = SAJE()
 saje.set_title("SAJE: Search in Arbitrary Json Engine - v%s" % (version.__version__))
-saje.tk.call('tk', 'scaling', 2.0)
+saje.tk.call("tk", "scaling", 2.0)
 saje.start()

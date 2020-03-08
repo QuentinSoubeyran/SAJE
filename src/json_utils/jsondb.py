@@ -29,11 +29,12 @@ __status__ = "beta"
 class ValueSet(set):
     pass
 
+
 class Comparison(enum.Enum):
     LT = (("lt", "<"), lambda x, y: x < y)
     LEQ = (("leq", "<="), lambda x, y: x <= y)
     EQ = (("eq", "=", "=="), lambda x, y: x == y)
-    NEQ = (("neq", "!="), lambda x,y: x != y)
+    NEQ = (("neq", "!="), lambda x, y: x != y)
     GEQ = (("geq", ">="), lambda x, y: x >= y)
     GT = (("gt", ">"), lambda x, y: x > y)
 
@@ -43,7 +44,7 @@ class Comparison(enum.Enum):
         obj.aliases = aliases
         obj.compare = function
         return obj
-    
+
     def __call__(self, *args, **kwargs):
         return self.compare(*args, **kwargs)
 
@@ -65,7 +66,7 @@ class Operator(enum.Enum):
         obj.aliases = aliases
         obj.function = function
         return obj
-    
+
     def __call__(self, *args, **kwargs):
         return self.function(*args, **kwargs)
 
@@ -202,7 +203,7 @@ class OptionField(FieldBase):
         super().__init__(key, optional=optional)
         self.values = set(values)
 
-    def test(self, json_value, valid_values, operator: Operator= Operator.OR):
+    def test(self, json_value, valid_values, operator: Operator = Operator.OR):
         """
         Test if the json value is (one of) the valid value(s)
 
@@ -223,9 +224,13 @@ class OptionField(FieldBase):
             if json.Type(json_value) is json.Value:
                 return json_value in valid_values
             else:
-                values = set(json_value if json.Type(json_value) is json.Array else json_value.values())
+                values = set(
+                    json_value
+                    if json.Type(json_value) is json.Array
+                    else json_value.values()
+                )
                 match = values & valid_values
-                ops = Operator(operator) #pylint: disable=no-value-for-parameter
+                ops = Operator(operator)  # pylint: disable=no-value-for-parameter
                 if ops is Operator.OR:
                     return bool(match)
                 elif ops is Operator.AND:
@@ -240,7 +245,11 @@ class OptionField(FieldBase):
             if json.Type(json_value) is json.Value:
                 return json_value == valid_values
             else:
-                values = set(json_value if json.Type(json_value) is json.Array else json_value.values())
+                values = set(
+                    json_value
+                    if json.Type(json_value) is json.Array
+                    else json_value.values()
+                )
                 return valid_values in values
 
     def _add_json_values(self, json_repr):
@@ -294,8 +303,8 @@ class IntegerField(FieldBase):
             raise ValueError("Invalid value %s: must be >= %s" % (value, self.min_))
         if self.max_ is not None and value > self.max_:
             raise ValueError("Invalid value %s: must be <= %s" % (value, self.max_))
-        comparison = Comparison(comparison) #pylint: disable=no-value-for-parameter
-        return comparison.compare(json_value, value) 
+        comparison = Comparison(comparison)  # pylint: disable=no-value-for-parameter
+        return comparison.compare(json_value, value)
 
     def _add_json_values(self, json_repr):
         if self.min_ is not None:
@@ -324,7 +333,7 @@ class TextField(FieldBase):
             operator: TextField.OR, TextField.AND, "and" or "or", whether to require
                 all substring (AND) or any substring (OR)
         """
-        ops = Operator(operator) #pylint: disable=no-value-for-parameter
+        ops = Operator(operator)  # pylint: disable=no-value-for-parameter
         return ops(subtxt in json_value for subtxt in value)
 
 
@@ -372,7 +381,7 @@ class Database:
         field_kwargs = [
             (self.fields[field_name], kwargs) for field_name, kwargs in criteria.items()
         ]
-        ops = Operator(operator) #pylint: disable=no-value-for-parameter
+        ops = Operator(operator)  # pylint: disable=no-value-for-parameter
         return [
             json_obj
             for json_obj in self.data
