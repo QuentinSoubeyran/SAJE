@@ -61,7 +61,7 @@ class MultiSelector(ttk.Treeview):
         self.bind("<1>", self.on_click)
         for value in values:
             self.insert("", "end", values=(value,))
-        self.column("#1", width=8 * max(len(v) for v in values))
+        self.column("#1", minwidth=8 * max(len(v) for v in values))
         self.button_frame = ttk.Frame(master=self.frame_)
         self.button_all = ttk.Button(
             master=self.button_frame, text="All", command=self.select_all
