@@ -29,7 +29,7 @@ __maintainer__ = "Quentin Soubeyran"
 __status__ = version.__status__
 
 LOGGER = logging.getLogger("SAJE.backend.tkinter")
-DEFAULT_SIZE = (640, 480)  # width, height
+DEFAULT_SIZE = (800, 600)  # width, height
 VALUE_ANY = "--Any--"
 
 
@@ -326,6 +326,7 @@ class TkNotebook(common.AbstractNotebook, ttk.Notebook):
 class MainApp(common.AbstractMainApp, tk.Tk):
     PACK_SIDES = ("top", "left")
     FILL = ("x", "y")
+    ORIENT = (tk.HORIZONTAL, tk.VERTICAL)
 
     def __init__(self):
         super().__init__()
@@ -363,7 +364,7 @@ class MainApp(common.AbstractMainApp, tk.Tk):
         # Search Area and Result Area
         tab.search = ttk.Frame(tab.frame)
         tab.result = ttk.Frame(tab.frame)
-        tab.search.pack(side="left", expand=True, fill="y")
+        tab.search.pack(side="left", expand=True, fill="both")
         tab.result.pack(side="right", expand=True, fill="both")
         # Result Area Content
         tab.display = TkHTMLDisplay(master=tab.result, wrap="word", state="disabled",)
@@ -401,7 +402,11 @@ class MainApp(common.AbstractMainApp, tk.Tk):
         side_id,
         nested_geometry,
     ):
-        for element in nested_geometry:
+        for i, element in enumerate(nested_geometry):
+            if i > 0:
+                ttk.Separator(master_frame, orient=self.ORIENT[side_id]).pack(
+                    side=self.PACK_SIDES[side_id], expand=True, fill=self.FILL[side_id]
+                )
             if isinstance(element, list):
                 sub_frame = ttk.Frame(master=master_frame)
                 self.make_nested_guis(
@@ -412,7 +417,7 @@ class MainApp(common.AbstractMainApp, tk.Tk):
                     nested_geometry=element,
                 )
                 sub_frame.pack(
-                    side=self.PACK_SIDES[side_id], expand=True, fill=self.FILL[side_id]
+                    side=self.PACK_SIDES[side_id], expand=True, fill="both"#self.FILL[side_id]
                 )
             else:
                 gui = TkFieldGui.make(
@@ -421,7 +426,7 @@ class MainApp(common.AbstractMainApp, tk.Tk):
                     field=parsed_file.database.fields[element],
                 )
                 gui.pack(
-                    side=self.PACK_SIDES[side_id], expand=True, fill=self.FILL[side_id]
+                    side=self.PACK_SIDES[side_id], expand=True, fill="both"#self.FILL[side_id]
                 )
                 gui_dict[element] = gui
         return gui_dict
