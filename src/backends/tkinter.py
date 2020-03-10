@@ -18,6 +18,7 @@ from dotmap import DotMap
 # Local modules
 from .. import version
 from ..json_utils import jsondb
+from ..json_utils import jsonplus as json
 from .. import parsing
 from ..backends import common
 
@@ -123,6 +124,37 @@ class MultiSelector(ttk.Treeview):
         """
         self.selection_toggle(*self.get_children())
 
+class OptionalDropdown:
+    """
+    If a single value is passed, just returns the value, else has a graphic component
+    """
+    SKIP = object()
+    def __init__(self, master, json_value, label):
+        type_ = json.Type(json_value)
+        if type_ is json.Array:
+            self.single = None
+            self.frame = ttk.Frame(master=master)
+            self.label = ttk.Label(master=self.frame, text=label)
+            self.dropdown = Dropdown(master=self.frame, values=json_value, interactive=False)
+            self.label.pack(side="left")
+            self.dropdown.pack(side="left")
+        elif type_ is json.Value:
+            self.single = json_value
+        else:
+            raise json.JsonTypeError("Invalid type %s for field option" % type_)
+    
+    def get(self):
+        if self.single is None:
+            return self.dropdown.get()
+        else:
+            return self.single
+    
+    def pack(self, *args, **kwargs):
+        if self.single is None:
+            self.frame.pack(*args, **kwargs)
+        else:
+            return self.SKIP
+
 
 class TkSearchButton(common.AbstractKwargsProvider, ttk.Frame):
     def __init__(self, master):
@@ -179,14 +211,16 @@ class TkFieldGui(common.AbstractKwargsProvider, ttk.Frame):
         widgets_groups: an iterable of iterable of widgets
         """
         previous = False
+        last_sep = None
         for group in widgets_groups:
             if previous:
-                ttk.Separator(self.config_frame, orient=tk.VERTICAL).pack(
+                last_sep = ttk.Separator(self.config_frame, orient=tk.VERTICAL)
+                last_sep.pack(
                     side="left", fill="y", expand=True
                 )
-            for widget in group:
-                widget.pack(side="left")
-            previous = True
+            previous = any([widget.pack(side="left") is not OptionalDropdown.SKIP for widget in group])
+        if last_sep and not previous:
+            last_sep.pack_forget()
 
     @classmethod
     def make(cls, master, gui_data: parsing.GuiDataBase, field: jsondb.FieldBase):
@@ -206,7 +240,10 @@ class TkOptionGui(TkFieldGui):
     ):
         super().__init__(master, gui_data, field)
         self.label.pack(side="top", fill="x")
-        self.pack_configs([[self.accept_na_button]])
+        self.ops_selector = OptionalDropdown(
+            master=self.config_frame, json_value=gui_data.operator, label="operation"
+        )
+        self.pack_configs([[self.accept_na_button], [self.ops_selector]])
         self.config_frame.pack(side="top")
         if gui_data.multi_selection:
             self.selector = MultiSelector(
@@ -222,7 +259,7 @@ class TkOptionGui(TkFieldGui):
     def get_kwargs(self):
         args = {
             "accept_missing": self.accept_na_var.get(),
-            "operator": self.gui_data.operator,
+            "operator": self.ops_selector.get(),
         }
         if self.gui_data.multi_selection:
             args["valid_values"] = jsondb.ValueSet(self.selector.get_selection())
@@ -245,7 +282,8 @@ class TkIntegerGui(TkFieldGui):
     ):
         super().__init__(master, gui_data, field)
         self.label.pack(side="top", fill="x")
-        self.pack_configs([[self.accept_na_button]])
+        self.comp_selector = OptionalDropdown(master=self.config_frame, json_value=gui_data.comparison, label="comparison")
+        self.pack_configs([[self.accept_na_button], [self.comp_selector]])
         self.config_frame.pack(side="top")
         values = list(gui_data.listed)
         if field.optional:
@@ -266,7 +304,7 @@ class TkIntegerGui(TkFieldGui):
         return {
             "accept_missing": self.accept_na_var.get(),
             "value": value,
-            "comparison": self.gui_data.comparison,
+            "comparison": self.comp_selector.get(),
         }
 
 
@@ -297,9 +335,6 @@ class TkTextGui(TkFieldGui):
             "operator": self.mode_selector.get(),
             "value": values,
         }
-
-
-# FieldTkGui.CLASSES[parsing.TextGuiData] = TextTkGui
 
 
 class TkHTMLDisplay(common.AbstractHTMLDisplay, tk_html.HTMLScrolledText):
