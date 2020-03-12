@@ -107,7 +107,7 @@ class FieldBase:
         self.key = key
         self.optional = bool(optional)
 
-    def compare(self, json_obj, accept_missing=True, **kwargs):
+    def compare(self, json_obj, accept_missing=True, invert=False, **kwargs):
         """
         Returns wether the json object matches with the value for this field
 
@@ -115,6 +115,8 @@ class FieldBase:
             json_obj        : the JSON-object on which to test a property
             accept_missing  : if `json_obj` has no value under the `key` specified
                 at Field object creation, whether to accept it or not
+            invert          : invert the boolean result of that field, selecting
+                json_obj that do *not* fullfil the tested property
             kwargs          : subclass-specific additionals arguments for the test. Usually
                 include `value` which is the value to test against
         
@@ -122,7 +124,7 @@ class FieldBase:
             True if the object passes the test, false otherwise
         """
         if json.has(json_obj, self.key):
-            return self.test(json.get(json_obj, self.key), **kwargs)
+            return bool(invert) ^ bool(self.test(json.get(json_obj, self.key), **kwargs))
         else:
             return accept_missing
 
@@ -259,9 +261,6 @@ class OptionField(FieldBase):
     #   as the value set
 
 
-# FieldBase.CLASSES[OptionField.TYPE] = OptionField
-
-
 class IntegerField(FieldBase):
     """
     Represent a search field for integer values
@@ -313,9 +312,6 @@ class IntegerField(FieldBase):
             json_repr["max"] = self.max_
 
 
-# Registed Parser
-# FieldBase.CLASSES[IntegerField.TYPE] = IntegerField
-
 
 class TextField(FieldBase):
     """
@@ -324,21 +320,21 @@ class TextField(FieldBase):
 
     TYPE = "Text"
 
-    def test(self, json_value, value, operator: Operator = Operator.OR):
+    def test(self, json_value, value, operator: Operator = Operator.OR, case=False):
         """
         Test if any/all subtexts are in the json value
 
         Args:
-            value: an iterable of subtext to find in the json_value
+            value   : an iterable of subtext to find in the json_value
             operator: TextField.OR, TextField.AND, "and" or "or", whether to require
                 all substring (AND) or any substring (OR)
+            case    : should the search be case sensitive
         """
         ops = Operator(operator)  # pylint: disable=no-value-for-parameter
-        return ops(subtxt in json_value for subtxt in value)
-
-
-# FieldBase.CLASSES[TextField.TYPE] = TextField
-
+        if case:
+            return ops(subtxt in json_value for subtxt in value)
+        else:
+            return ops(subtxt.lower() in json_value.lower() for subtxt in value)
 
 class Database:
     """
