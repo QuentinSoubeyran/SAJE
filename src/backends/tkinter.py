@@ -63,12 +63,7 @@ class MultiSelector(ttk.Treeview):
             **kwargs
         )
         self.bind("<1>", self.on_click)
-<<<<<<< HEAD
-        for value in values:
-            self.insert("", "end", values=(value,))
-=======
         self.set_values(values)
->>>>>>> master
         # self.column("#1", minwidth=8 * max(len(v) for v in values))
         self.button_frame = ttk.Frame(master=self.frame_)
         self.button_all = ttk.Button(
