@@ -48,7 +48,7 @@ class MultiSelector(ttk.Treeview):
     Widget to select/deselect multiple element in a list, with a scrollbar
     """
 
-    def __init__(self, values, master, *args, height=5, **kwargs):
+    def __init__(self, master, values, *args, height=5, **kwargs):
         self.frame_ = ttk.Frame(master=master)
         super().__init__(
             *args,
@@ -59,9 +59,8 @@ class MultiSelector(ttk.Treeview):
             **kwargs
         )
         self.bind("<1>", self.on_click)
-        for value in values:
-            self.insert("", "end", values=(value,))
-        self.column("#1", minwidth=8 * max(len(v) for v in values))
+        self.set_values(values)
+        # self.column("#1", minwidth=8 * max(len(v) for v in values))
         self.button_frame = ttk.Frame(master=self.frame_)
         self.button_all = ttk.Button(
             master=self.button_frame, text="All", command=self.select_all
@@ -90,7 +89,15 @@ class MultiSelector(ttk.Treeview):
         """
         Returns the selected element from the `values` passed to `__init__()`
         """
-        return [self.item(item)["values"][0] for item in self.selection()]
+        return [self.item(item, "value")[0] for item in self.selection()]
+
+    def set_selection(self, values):
+        """
+        Set the current selection from a subset of 'values' passed to __init__
+        """
+        self.selection_set(
+            [item for item in self.get_children() if self.item(item, "value") in values]
+        )
 
     def on_click(self, event):
         """
@@ -122,6 +129,14 @@ class MultiSelector(ttk.Treeview):
         Toggle the selection of all items
         """
         self.selection_toggle(*self.get_children())
+
+    def set_values(self, values):
+        selection = set(self.get_selection())
+        self.select_clear()
+        self.delete(*self.get_children())
+        for value in values:
+            self.insert("", "end", value=(value,))
+        self.set_selection(selection & set(values))
 
 
 class TkSearchButton(common.AbstractKwargsProvider, ttk.Frame):

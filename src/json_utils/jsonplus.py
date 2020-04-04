@@ -19,8 +19,49 @@ __status__ = "beta"
 set_type = set
 
 
-class JsonTypeError(BaseException):
-    pass
+class JsonTypeError(Exception):
+    """
+    Base exception for Json typing
+    """
+
+
+class NotAJsonTypeError(JsonTypeError):
+    """
+    Exception when encountering a python type that is not valid in json
+
+    Attributes
+        pytype -- the python type that is invalid (as returned by type())
+        message (optional) -- explanation of the error
+    """
+
+    def __init__(self, pytype, message="{pytype} is not a valid type for json"):
+        """
+        Formats the message string with str.format() to retrieve pytype
+        """
+        message = message.format(pytype=pytype)
+        super().__init__(message)
+        self.pytype = pytype
+        self.message = message
+
+
+class InvalidJsonTypeError(JsonTypeError):
+    """
+    Exception when the json type is not the expected one
+
+    Attributes:
+        expected -- The expected Type value
+        got -- the Type value that was found
+        message (optional) -- explanation of the error
+    """
+
+    def __init__(
+        self, expected, got, message="Expected json Type {expected}, got {got}"
+    ):
+        message = message.format(expected=expected, got=got)
+        super().__init__(message)
+        self.got = (got,)
+        self.expected = expected
+        self.message = message
 
 
 class Type(enum.Enum):
@@ -50,13 +91,37 @@ class Type(enum.Enum):
         ):
             return Type.Value
         else:
-            raise JsonTypeError("Type %s is invalid in JSON" % type(json_obj))
+            raise NotAJsonTypeError(type(json_obj))
+
+    @staticmethod
+    def is_boolean(json_obj):
+        return isinstance(json_obj, bool)
 
     @staticmethod
     def is_numeric(json_obj):
-        if isinstance(json_obj, int) or isinstance(json_obj, float):
-            return True
-        return False
+        return isinstance(json_obj, int) or isinstance(json_obj, float)
+
+    @staticmethod
+    def is_string(json_obj):
+        return isinstance(json_obj, str)
+
+    @staticmethod
+    def check_value(json_obj):
+        type_ = Type(json_obj)
+        if type_ is not Type.Value:
+            raise InvalidJsonTypeError(Type.Value, type_)
+
+    @staticmethod
+    def check_array(json_obj):
+        type_ = Type(json_obj)
+        if type_ is not Type.Array:
+            raise InvalidJsonTypeError(Type.Array, type_)
+
+    @staticmethod
+    def check_object(json_obj):
+        type_ = Type(json_obj)
+        if type_ is not Type.Object:
+            raise InvalidJsonTypeError(Type.Object, type_)
 
 
 Object, Array, Value = Type.Object, Type.Array, Type.Value
@@ -226,22 +291,35 @@ def compare_jsons(
     return json_compare([], tuple(), left_json, right_json)
 
 
-def get(obj, key, sep="."):
+def get(obj, key, jtype=None, sep="."):
+    if jtype and not jtype in Type:
+        raise TypeError(
+            "jtype argument must be a member of %s%s"
+            % (
+                f"{str(Type.__module__)}." if Type.__module__ else "",
+                str(Type.__class__.__name__),
+            )
+        )
     if isinstance(key, str):
         key = key.split(sep)
     if len(key) == 0:
         raise KeyError("empty Json key")
-    elif len(key) == 1:
-        return obj[key[0]]
-    else:
-        return get(obj[key[0]], key[1:])
+    for k in key[:-1]:
+        obj = obj[k]
+    value = obj[key[0]]
+    if jtype and not Type(value) is jtype:
+        raise InvalidJsonTypeError(
+            jtype,
+            Type(value),
+            'Key "%s" doesn\'t have the expected json Type {expected}'
+            % (".".join(key)),
+        )
+    return value
 
 
-def has(obj, key, sep="."):
-    if isinstance(key, str):
-        key = key.split(sep)
+def has(obj, key, jtype=None, sep="."):
     try:
-        get(obj, key)
+        get(obj, key, jtype, sep)
         return True
     except KeyError:
         return False
