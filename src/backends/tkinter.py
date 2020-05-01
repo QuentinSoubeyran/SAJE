@@ -18,6 +18,7 @@ from dotmap import DotMap
 # Local modules
 from .. import version
 from ..json_utils import jsondb
+from ..json_utils import jsonplus as json
 from .. import parsing
 from ..backends import common
 
@@ -37,10 +38,18 @@ class Dropdown(ttk.Combobox):
     def __init__(self, master, values, *args, interactive=True, **kwargs):
         state = "readonly" if not interactive else None
         width = max(len(str(v)) for v in values) + 1
+        values = list(values)
         super().__init__(
             master, *args, state=state, values=values, width=width, **kwargs
         )
-        self.set(values[0])
+        if values:
+            self.set(values[0])
+
+    def set_values(self, values):
+        selected = self.get()
+        values = list(values)
+        self.configure(values=values, width=max(len(str(v)) for v in values) + 1)
+        self.set(selected if selected in values else values[0])
 
 
 class MultiSelector(ttk.Treeview):
@@ -48,19 +57,21 @@ class MultiSelector(ttk.Treeview):
     Widget to select/deselect multiple element in a list, with a scrollbar
     """
 
-    def __init__(self, master, values, *args, height=5, **kwargs):
+    def __init__(self, master, values, *args, height=5, min_height=3, **kwargs):
         self.frame_ = ttk.Frame(master=master)
         super().__init__(
             *args,
             master=self.frame_,
-            show="",
-            columns=["value"],
-            height=min(len(values), height),
+            show="tree",
+            columns=[],
+            height=max(3, min(len(values), height)),
             **kwargs
         )
+        self.height_arg = height
+        self.min_height_arg = min_height
+        # self.column("cache", width=0, minwidth=0, stretch=False)
         self.bind("<1>", self.on_click)
-        self.set_values(values)
-        # self.column("#1", minwidth=8 * max(len(v) for v in values))
+        # Under buttons
         self.button_frame = ttk.Frame(master=self.frame_)
         self.button_all = ttk.Button(
             master=self.button_frame, text="All", command=self.select_all
@@ -71,32 +82,51 @@ class MultiSelector(ttk.Treeview):
         self.button_toggle = ttk.Button(
             master=self.button_frame, text="Toggle", command=self.select_toggle
         )
-        self.button_frame.pack(side="bottom")
-        self.button_all.pack(side="left")
-        self.button_clear.pack(side="left")
-        self.button_toggle.pack(side="left")
-        if height < len(values):
-            self.scrollbar_ = ttk.Scrollbar(
-                master=self.frame_, orient=tk.VERTICAL, command=self.yview
-            )
-            self.configure(yscrollcommand=self.scrollbar_.set)
-            self.scrollbar_.pack(side="right", expand=True, fill="y")
+        self.button_frame.pack(side="bottom", fill="x")
+        self.button_all.pack(side="left", fill="x", expand=True)
+        self.button_clear.pack(side="left", fill="x", expand=True)
+        self.button_toggle.pack(side="left", fill="x", expand=True)
+        self.scrollbar_ = ttk.Scrollbar(
+            master=self.frame_, orient=tk.VERTICAL, command=self.yview
+        )
+        self.configure(yscrollcommand=self.scrollbar_.set)
+        self.scrollbar_.pack(side="right", expand=False, fill="y")
         self.pack(side="left", expand=True, fill="both")
+        self.id_value_map = {}
+        self.set_values(values)
         self.pack = self.frame_.pack
         self.grid = self.frame_.grid
+
+    def adapt_display(self, item_number):
+        height = max(self.min_height_arg, min(item_number, self.height_arg))
+        self.config(height=height)
+
+    def set_values(self, values):
+        selection = set(self.get_selection())
+        self.select_clear()
+        self.delete(*self.get_children())
+        self.id_value_map = {
+            self.insert("", "end", text=str(value)): value for value in values
+        }
+        self.set_selection(selection & set(values))
+        self.adapt_display(len(values))
 
     def get_selection(self):
         """
         Returns the selected element from the `values` passed to `__init__()`
         """
-        return [self.item(item, "value")[0] for item in self.selection()]
+        return [
+            self.id_value_map[item]
+            for item in self.selection()
+            if item in self.id_value_map
+        ]
 
     def set_selection(self, values):
         """
         Set the current selection from a subset of 'values' passed to __init__
         """
         self.selection_set(
-            [item for item in self.get_children() if self.item(item, "value") in values]
+            [item for item in self.get_children() if self.id_value_map[item] in values]
         )
 
     def on_click(self, event):
@@ -130,13 +160,42 @@ class MultiSelector(ttk.Treeview):
         """
         self.selection_toggle(*self.get_children())
 
-    def set_values(self, values):
-        selection = set(self.get_selection())
-        self.select_clear()
-        self.delete(*self.get_children())
-        for value in values:
-            self.insert("", "end", value=(value,))
-        self.set_selection(selection & set(values))
+
+class OptionalDropdown:
+    """
+    If a single value is passed, just returns the value, else has a graphic component
+    """
+
+    SKIP = object()
+
+    def __init__(self, master, json_value, label):
+        type_ = json.Type(json_value)
+        if type_ is json.Array:
+            self.single = None
+            self.frame = ttk.Frame(master=master)
+            self.label = ttk.Label(master=self.frame, text=label)
+            self.dropdown = Dropdown(
+                master=self.frame, values=json_value, interactive=False
+            )
+            self.dropdown.set(json_value[0])
+            self.label.pack(side="left")
+            self.dropdown.pack(side="left")
+        elif type_ is json.Value:
+            self.single = json_value
+        else:
+            raise json.JsonTypeError("Invalid type %s for field option" % type_)
+
+    def get(self):
+        if self.single is None:
+            return self.dropdown.get()
+        else:
+            return self.single
+
+    def pack(self, *args, **kwargs):
+        if self.single is None:
+            self.frame.pack(*args, **kwargs)
+        else:
+            return self.SKIP
 
 
 class TkSearchButton(common.AbstractKwargsProvider, ttk.Frame):
@@ -155,7 +214,7 @@ class TkSearchButton(common.AbstractKwargsProvider, ttk.Frame):
         return {"operator": self.mode_selector.get()}
 
 
-class TkFieldGui(common.AbstractKwargsProvider, ttk.Frame):
+class TkFieldGui(common.AbstractKwargsProvider, ttk.LabelFrame):
     """
     Base class for GUI for a single field
     """
@@ -171,10 +230,10 @@ class TkFieldGui(common.AbstractKwargsProvider, ttk.Frame):
         cls.CLASSES[cls.GUI_DATA_CLS] = cls
 
     def __init__(self, master, gui_data: parsing.GuiDataBase, field: jsondb.FieldBase):
-        super().__init__(master)
+        super().__init__(master, text=gui_data.name)
         self.gui_data = gui_data
         self.field = field
-        self.label = ttk.Label(master=self, text=gui_data.name)
+        #self.label = ttk.Label(master=self, text=gui_data.name)
         self.config_frame = ttk.Frame(self)
         self.accept_na_var = tk.BooleanVar(self.config_frame, value=True)
         self.accept_na_button = ttk.Checkbutton(
@@ -185,6 +244,14 @@ class TkFieldGui(common.AbstractKwargsProvider, ttk.Frame):
             variable=self.accept_na_var,
         )
         self.accept_na_var.set(True)
+        self.invert_var = tk.BooleanVar(self.config_frame, value=False)
+        self.invert_button = ttk.Checkbutton(
+            master=self.config_frame,
+            text="invert",
+            onvalue=True,
+            offvalue=False,
+            variable=self.invert_var,
+        )
 
     def pack_configs(self, widgets_groups):
         """
@@ -194,14 +261,19 @@ class TkFieldGui(common.AbstractKwargsProvider, ttk.Frame):
         widgets_groups: an iterable of iterable of widgets
         """
         previous = False
+        last_sep = None
         for group in widgets_groups:
             if previous:
-                ttk.Separator(self.config_frame, orient=tk.VERTICAL).pack(
-                    side="left", fill="y", expand=True
-                )
-            for widget in group:
-                widget.pack(side="left")
-            previous = True
+                last_sep = ttk.Separator(self.config_frame, orient=tk.VERTICAL)
+                last_sep.pack(side="left", fill="y", expand=True)
+            previous = any(
+                [
+                    widget.pack(side="left", expand=True) is not OptionalDropdown.SKIP
+                    for widget in group
+                ]
+            )
+        if last_sep and not previous:
+            last_sep.pack_forget()
 
     @classmethod
     def make(cls, master, gui_data: parsing.GuiDataBase, field: jsondb.FieldBase):
@@ -220,24 +292,35 @@ class TkOptionGui(TkFieldGui):
         self, master, gui_data: parsing.OptionGuiData, field: jsondb.OptionField
     ):
         super().__init__(master, gui_data, field)
-        self.label.pack(side="top", fill="x")
-        self.pack_configs([[self.accept_na_button]])
-        self.config_frame.pack(side="top")
+        #self.label.pack(side="top", fill="x", expand=True)
+        self.ops_selector = OptionalDropdown(
+            master=self.config_frame, json_value=gui_data.operator, label="operation"
+        )
         if gui_data.multi_selection:
+            self.pack_configs([[self.accept_na_button], [self.ops_selector]])
+            self.config_frame.pack(side="top")
             self.selector = MultiSelector(
                 values=gui_data.field_spec["values"], master=self, height=5
             )
+            self.selector.pack(side="top", expand=True, fill="y")
         else:
+            self.pack_configs(
+                [[self.accept_na_button], [self.invert_button], [self.ops_selector]]
+            )
+            self.config_frame.pack(side="top")
             values = gui_data.field_spec["values"].copy()
             if field.optional:
                 values = [VALUE_ANY] + values
             self.selector = Dropdown(master=self, values=values, interactive=False)
-        self.selector.pack(side="top")
+            self.selector.pack(side="top")
 
     def get_kwargs(self):
         args = {
+            "invert": self.invert_var.get()
+            if not self.gui_data.multi_selection
+            else False,
             "accept_missing": self.accept_na_var.get(),
-            "operator": self.gui_data.operator,
+            "operator": self.ops_selector.get(),
         }
         if self.gui_data.multi_selection:
             args["valid_values"] = jsondb.ValueSet(self.selector.get_selection())
@@ -259,8 +342,13 @@ class TkIntegerGui(TkFieldGui):
         self, master, gui_data: parsing.IntegerGuiData, field: jsondb.IntegerField
     ):
         super().__init__(master, gui_data, field)
-        self.label.pack(side="top", fill="x")
-        self.pack_configs([[self.accept_na_button]])
+        #self.label.pack(side="top", fill="x", expand=True)
+        self.comp_selector = OptionalDropdown(
+            master=self.config_frame, json_value=gui_data.comparison, label="comparison"
+        )
+        self.pack_configs(
+            [[self.accept_na_button], [self.invert_button], [self.comp_selector]]
+        )
         self.config_frame.pack(side="top")
         values = list(gui_data.listed)
         if field.optional:
@@ -281,7 +369,7 @@ class TkIntegerGui(TkFieldGui):
         return {
             "accept_missing": self.accept_na_var.get(),
             "value": value,
-            "comparison": self.gui_data.comparison,
+            "comparison": self.comp_selector.get(),
         }
 
 
@@ -290,17 +378,20 @@ class TkTextGui(TkFieldGui):
 
     def __init__(self, master, gui_data: parsing.TextGuiData, field: jsondb.TextField):
         super().__init__(master, gui_data, field)
-        self.mode_label = ttk.Label(master=self.config_frame, text="required lines:")
-        self.mode_selector = Dropdown(
-            master=self.config_frame, values=("Any", "All"), interactive=False,
+        self.case_selector = OptionalDropdown(
+            master=self.config_frame, json_value=gui_data.case, label="case sensitive:"
+        )
+        self.mode_selector = OptionalDropdown(
+            master=self.config_frame,
+            json_value=gui_data.operator,
+            label="required lines:",
         )
         self.selector = tk.Text(master=self, wrap="word", height=5, width=30)
-        self.label.pack(side="top", fill="x")
-        self.pack_configs(
-            [[self.accept_na_button], [self.mode_label, self.mode_selector]]
-        )
+        #self.label.pack(side="top", fill="x", expand=True)
+        self.accept_na_button.pack(side="top")
+        self.pack_configs([[self.case_selector], [self.mode_selector]])
         self.config_frame.pack(side="top")
-        self.selector.pack(side="top")
+        self.selector.pack(side="top", expand=True, fill="both")
 
     def get_kwargs(self):
         text = self.selector.get("1.0", "end-1c")
@@ -310,11 +401,9 @@ class TkTextGui(TkFieldGui):
         return {
             "accept_missing": self.accept_na_var.get(),
             "operator": self.mode_selector.get(),
+            "case": eval(self.case_selector.get()),
             "value": values,
         }
-
-
-# FieldTkGui.CLASSES[parsing.TextGuiData] = TextTkGui
 
 
 class TkHTMLDisplay(common.AbstractHTMLDisplay, tk_html.HTMLScrolledText):
@@ -336,6 +425,8 @@ class TkNotebook(common.AbstractNotebook, ttk.Notebook):
     def add_tab(self, tab, title=""):
         self.tabs_.append(tab)
         self.add(tab.frame, text=title)
+        tab.frame.add(tab.search)
+        tab.frame.add(tab.display)
 
 
 class MainApp(common.AbstractMainApp, tk.Tk):
@@ -345,6 +436,8 @@ class MainApp(common.AbstractMainApp, tk.Tk):
 
     def __init__(self):
         super().__init__()
+        s = ttk.Style()
+        s.configure("Sash", gripcount=10)
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
 
@@ -375,21 +468,19 @@ class MainApp(common.AbstractMainApp, tk.Tk):
         """
         tab = DotMap()
         # Main frame
-        tab.frame = ttk.Frame(self.notebook)
+        tab.frame = ttk.PanedWindow(self.notebook, orient=tk.HORIZONTAL)
         # Search Area and Result Area
         tab.search = ttk.Frame(tab.frame)
-        tab.result = ttk.Frame(tab.frame)
-        tab.search.pack(side="left", expand=True, fill="both")
-        tab.result.pack(side="right", expand=True, fill="both")
-        # Result Area Content
-        tab.display = TkHTMLDisplay(master=tab.result, wrap="word", state="disabled",)
-        tab.display.pack(side="left", expand=True, fill="both")
         # Search Area content
         ## Search Button
         tab.search_button_gui = TkSearchButton(tab.search)
-        tab.search_button_gui.pack(side="top")
+        tab.search_button_gui.pack(side="top", expand=True, fill="both")
         ## Search Fields
         tab.gui_dict = self.make_guis(parsed_file, tab.search)
+        # Result Area Content
+        tab.display = TkHTMLDisplay(
+            master=tab.frame, wrap="word", state="disabled", width=-10
+        )
         tab.search_button_gui.button.configure(
             command=TkSearchCallback(
                 parsed_file=parsed_file,
@@ -432,7 +523,9 @@ class MainApp(common.AbstractMainApp, tk.Tk):
                     nested_geometry=element,
                 )
                 sub_frame.pack(
-                    side=self.PACK_SIDES[side_id], expand=True, fill="both"#self.FILL[side_id]
+                    side=self.PACK_SIDES[side_id],
+                    expand=True,
+                    fill="both",  # self.FILL[side_id]
                 )
             else:
                 gui = TkFieldGui.make(
@@ -441,7 +534,9 @@ class MainApp(common.AbstractMainApp, tk.Tk):
                     field=parsed_file.database.fields[element],
                 )
                 gui.pack(
-                    side=self.PACK_SIDES[side_id], expand=True, fill="both"#self.FILL[side_id]
+                    side=self.PACK_SIDES[side_id],
+                    expand=True,
+                    fill="both",  # self.FILL[side_id]
                 )
                 gui_dict[element] = gui
         return gui_dict

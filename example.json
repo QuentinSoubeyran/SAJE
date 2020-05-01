@@ -21,7 +21,7 @@
                 "type": "Integer",
                 "key": "level",
                 "optional": true,
-                "comparison": "<=",
+                "comparison": ["<=", ">="],
                 "min": 1,
                 "max": 30,
                 "listed": [1,11,21]

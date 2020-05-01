@@ -25,3 +25,9 @@ def err_str(err):
     Utility function to get a nice str of an Exception for display purposes
     """
     return "\n".join(format_exception_only(type(err), err))
+
+class NocaseList(list):
+    def __contains__(self, value):
+        if isinstance(value, str):
+            return super().__contains__(value.lower())
+        return super().__contains__(value)

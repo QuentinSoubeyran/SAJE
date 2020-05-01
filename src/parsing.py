@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from . import version
 from .json_utils import jsonplus as json
 from .json_utils import jsondb
+from.utils import NocaseList
 
 __author__ = "Quentin Soubeyran"
 __copyright__ = "Copyright 2020, SAJE project"
@@ -198,9 +199,21 @@ class GuiDataBase:
     """
 
     CLASSES = {}
+    TYPE = None
+    NAME = None
+    OPS = NocaseList(name for ops in jsondb.Operator for name in ops.aliases)
+    COMP = NocaseList(name for comp in jsondb.Comparison for name in comp.aliases)
+
+    def __init_subclass__(cls, **kwargs):
+        """
+        Register subclasses into the CLASSES attribute, under the key subclass.TYPE
+        """
+        super().__init_subclass__(**kwargs)
+        if cls.TYPE is not None:
+            cls.CLASSES[cls.TYPE] = cls
 
     def __init__(self, json_obj):
-        self.name = json_obj.pop("name")
+        self.name = self.coerce(json_obj, "name", str)
 
     @staticmethod
     def parse_json(json_obj):
@@ -210,20 +223,95 @@ class GuiDataBase:
         type_ = json_obj["type"]
         return GuiDataBase.CLASSES[type_](json_obj)
 
+    @classmethod
+    def coerce(cls, json_obj, key, type_, default=None, req_array=None, valid_values=None):
+        """
+        Verifies the values from the json are valid, and return them
+
+        Args:
+            json_obj    : the json object to extract values from
+            key         : the key to extract value from
+            type_       : the python type of values. Raises TypeError if the extracted type is wrong
+            default     : the default value.  Raise ValueError if default is `None` and the json has not value for the specified key
+            req_array   : `None`: value cannot be an array. `False`: value can be an Array of value. `True`: value must be as Array
+            valid_values: the list of valid values, if any
+        
+        Returns:
+            Equivalent to json.pop(key)
+        
+        Raises:
+            TypeError if the type of the value is wrong
+            ValueError if the value is not in valid_values
+        """
+        if key not in json_obj:
+            if default is not None:
+                return default
+            else:
+                raise ValueError(
+                    "Option '%s' is required for %s field" % (key, cls.NAME)
+                )
+        value = json_obj.pop(key)
+        jtype = json.Type(value)
+        if jtype is json.Object:
+            raise TypeError("Field options cannot be json Objects")
+        elif jtype is json.Array:
+            if req_array is None:
+                raise TypeError(
+                    "Option '%s' of %s field cannot be an Array" % (key, cls.NAME)
+                )
+            coerced = value
+        else:
+            if req_array is True:
+                raise TypeError(
+                    "Option '%s' of %s field must be an Array" % (key, cls.NAME)
+                )
+            coerced = [value]
+
+        invalids = [v for v in coerced if not isinstance(v, type_)]
+        if invalids:
+            values = ", ".join("'%s'" % v for v in invalids)
+            raise TypeError(
+                "Invalid value %s for option '%s' in %s field, value(s) must be of type %s"
+                % (values, key, cls.NAME, type_.__name__)
+            )
+
+        if valid_values is not None:
+            invalids = [v for v in coerced if v not in valid_values]
+            if invalids:
+                values = ", ".join("'%s'" % v for v in invalids)
+                raise ValueError(
+                    "Invalid value %s for option '%s' in %s field, value(s) must be in %s"
+                    % (values, key, cls.NAME, valid_values)
+                )
+
+        if len(coerced) == 1:
+            return coerced[0]
+        else:
+            return coerced
+
 
 class OptionGuiData(GuiDataBase):
     """
     Parses the json obejct and stores the Field object and GUI data for an Option field
     """
 
+    TYPE = jsondb.OptionField.TYPE
+    NAME = "option"
+
     def __init__(self, json_obj):
         super().__init__(json_obj)
-        self.multi_selection = json_obj.pop("multi_selection", False)
-        self.operator = json_obj.pop("operator", "or")
+        self.multi_selection = self.coerce(
+            json_obj, key="multi_selection", type_=bool, default=False
+        )
+        self.operator = self.coerce(
+            json_obj,
+            key="operator",
+            type_=str,
+            default="or",
+            req_array=False,
+            valid_values=self.OPS,
+        )
         self.field_spec = json_obj
-
-
-GuiDataBase.CLASSES[jsondb.OptionField.TYPE] = OptionGuiData
 
 
 class IntegerGuiData(GuiDataBase):
@@ -231,14 +319,23 @@ class IntegerGuiData(GuiDataBase):
     Parses the json and stores the Field object and GUI data for an Integer field
     """
 
+    TYPE = jsondb.IntegerField.TYPE
+    NAME = "integer"
+
     def __init__(self, json_obj):
         super().__init__(json_obj)
-        self.listed = json_obj.pop("listed", [])
-        self.comparison = json_obj.pop("comparison", "eq")
+        self.listed = self.coerce(
+            json_obj, key="listed", type_=int, default=[], req_array=True
+        )
+        self.comparison = self.coerce(
+            json_obj,
+            key="comparison",
+            type_=str,
+            default="eq",
+            req_array=False,
+            valid_values=self.COMP,
+        )
         self.field_spec = json_obj
-
-
-GuiDataBase.CLASSES[jsondb.IntegerField.TYPE] = IntegerGuiData
 
 
 class TextGuiData(GuiDataBase):
@@ -246,12 +343,22 @@ class TextGuiData(GuiDataBase):
     Parsed the json and stores the Field object and GUI data for a Text field
     """
 
+    TYPE = jsondb.TextField.TYPE
+
     def __init__(self, json_obj):
         super().__init__(json_obj)
+        self.operator = self.coerce(
+            json_obj,
+            key="operator",
+            type_=str,
+            default=["Any", "All"],
+            req_array=False,
+            valid_values=self.OPS,
+        )
+        self.case = self.coerce(
+            json_obj, key="case", type_=bool, default=[False, True], req_array=False
+        )
         self.field_spec = json_obj
-
-
-GuiDataBase.CLASSES[jsondb.TextField.TYPE] = TextGuiData
 
 
 def parse_nested_fields(field_dict, field_geometry, field_nested_list):
