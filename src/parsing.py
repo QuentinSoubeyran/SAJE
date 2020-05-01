@@ -224,7 +224,7 @@ class GuiDataBase:
         return GuiDataBase.CLASSES[type_](json_obj)
 
     @classmethod
-    def coerce(cls, json_obj, key, type_, default=None, req_array=None, valid_values=None):
+    def coerce(cls, json_obj, key, type_, default=None, is_array=False, valid_values=None):
         """
         Verifies the values from the json are valid, and return them
 
@@ -233,7 +233,7 @@ class GuiDataBase:
             key         : the key to extract value from
             type_       : the python type of values. Raises TypeError if the extracted type is wrong
             default     : the default value.  Raise ValueError if default is `None` and the json has not value for the specified key
-            req_array   : `None`: value cannot be an array. `False`: value can be an Array of value. `True`: value must be as Array
+            is_array   : `False`: value cannot be an array. `False`: value can be an Array of value. `True`: value must be as Array
             valid_values: the list of valid values, if any
         
         Returns:
@@ -255,13 +255,13 @@ class GuiDataBase:
         if jtype is json.Object:
             raise TypeError("Field options cannot be json Objects")
         elif jtype is json.Array:
-            if req_array is None:
+            if not is_array and is_array is not None:
                 raise TypeError(
                     "Option '%s' of %s field cannot be an Array" % (key, cls.NAME)
                 )
             coerced = value
         else:
-            if req_array is True:
+            if is_array:
                 raise TypeError(
                     "Option '%s' of %s field must be an Array" % (key, cls.NAME)
                 )
@@ -301,14 +301,14 @@ class OptionGuiData(GuiDataBase):
     def __init__(self, json_obj):
         super().__init__(json_obj)
         self.multi_selection = self.coerce(
-            json_obj, key="multi_selection", type_=bool, default=False
+            json_obj, key="multi_selection", type_=bool, default=False, is_array=False
         )
         self.operator = self.coerce(
             json_obj,
             key="operator",
             type_=str,
             default="or",
-            req_array=False,
+            is_array=None,
             valid_values=self.OPS,
         )
         self.field_spec = json_obj
@@ -325,14 +325,14 @@ class IntegerGuiData(GuiDataBase):
     def __init__(self, json_obj):
         super().__init__(json_obj)
         self.listed = self.coerce(
-            json_obj, key="listed", type_=int, default=[], req_array=True
+            json_obj, key="listed", type_=int, default=[], is_array=True
         )
         self.comparison = self.coerce(
             json_obj,
             key="comparison",
             type_=str,
             default="eq",
-            req_array=False,
+            is_array=None,
             valid_values=self.COMP,
         )
         self.field_spec = json_obj
@@ -352,11 +352,11 @@ class TextGuiData(GuiDataBase):
             key="operator",
             type_=str,
             default=["Any", "All"],
-            req_array=False,
+            is_array=None,
             valid_values=self.OPS,
         )
         self.case = self.coerce(
-            json_obj, key="case", type_=bool, default=[False, True], req_array=False
+            json_obj, key="case", type_=bool, default=[False, True], is_array=None
         )
         self.field_spec = json_obj
 
