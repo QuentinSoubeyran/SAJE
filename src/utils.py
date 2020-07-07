@@ -26,6 +26,7 @@ def err_str(err):
     """
     return "\n".join(format_exception_only(type(err), err))
 
+
 class NocaseList(list):
     def __contains__(self, value):
         if isinstance(value, str):

@@ -30,7 +30,7 @@ __maintainer__ = "Quentin Soubeyran"
 __status__ = version.__status__
 
 LOGGER = logging.getLogger("SAJE.backend.tkinter")
-DEFAULT_SIZE = (800, 600)  # width, height
+DEFAULT_SIZE = (1024, 768)  # width, height
 VALUE_ANY = "--Any--"
 
 
@@ -202,11 +202,15 @@ class TkSearchButton(common.AbstractKwargsProvider, ttk.Frame):
     def __init__(self, master):
         super().__init__(master=master)
         self.button = ttk.Button(master=self, text="Search")
-        self.mode_label = ttk.Label(master=self, text="criteria to fulfill: ")
-        self.mode_selector = Dropdown(
-            master=self, values=("All", "Any"), interactive=False
+        self.mode_frame = ttk.Frame(self)
+        self.mode_label = ttk.Label(
+            master=self.mode_frame, text="criteria to fulfill: "
         )
-        self.button.pack(side="left")
+        self.mode_selector = Dropdown(
+            master=self.mode_frame, values=("All", "Any"), interactive=False
+        )
+        self.button.pack(side="top")
+        self.mode_frame.pack(side="top")
         self.mode_label.pack(side="left")
         self.mode_selector.pack(side="left")
 
@@ -216,7 +220,7 @@ class TkSearchButton(common.AbstractKwargsProvider, ttk.Frame):
 
 class TkFieldGui(common.AbstractKwargsProvider, ttk.LabelFrame):
     """
-    Base class for GUI for a single field
+    Base class for the GUI of a single search field
     """
 
     CLASSES = {}
@@ -233,38 +237,41 @@ class TkFieldGui(common.AbstractKwargsProvider, ttk.LabelFrame):
         super().__init__(master, text=gui_data.name)
         self.gui_data = gui_data
         self.field = field
-        #self.label = ttk.Label(master=self, text=gui_data.name)
-        self.config_frame = ttk.Frame(self)
-        self.accept_na_var = tk.BooleanVar(self.config_frame, value=True)
-        self.accept_na_button = ttk.Checkbutton(
-            master=self.config_frame,
+        # self.label = ttk.Label(master=self, text=gui_data.name)
+        self.frame_config = ttk.Frame(self)
+        self.var_acceptNA = tk.BooleanVar(self.frame_config, value=True)
+        self.button_acceptNA = ttk.Checkbutton(
+            master=self.frame_config,
             text="accept N/A",
             onvalue=True,
             offvalue=False,
-            variable=self.accept_na_var,
+            variable=self.var_acceptNA,
         )
-        self.accept_na_var.set(True)
-        self.invert_var = tk.BooleanVar(self.config_frame, value=False)
-        self.invert_button = ttk.Checkbutton(
-            master=self.config_frame,
+        self.var_acceptNA.set(True)
+        self.var_invert = tk.BooleanVar(self.frame_config, value=False)
+        self.button_invert = ttk.Checkbutton(
+            master=self.frame_config,
             text="invert",
             onvalue=True,
             offvalue=False,
-            variable=self.invert_var,
+            variable=self.var_invert,
         )
+        self.var_invert.set(False)
 
-    def pack_configs(self, widgets_groups):
+    def pack_configs(self, widgets_groups, *, master=None):
         """
         Packs from left to right the option widgets, adding separator between groups
         (typically lable+button or label+selector)
 
         widgets_groups: an iterable of iterable of widgets
         """
+        if master is None:
+            master = self.frame_config
         previous = False
         last_sep = None
         for group in widgets_groups:
             if previous:
-                last_sep = ttk.Separator(self.config_frame, orient=tk.VERTICAL)
+                last_sep = ttk.Separator(master=master, orient=tk.VERTICAL)
                 last_sep.pack(side="left", fill="y", expand=True)
             previous = any(
                 [
@@ -292,22 +299,23 @@ class TkOptionGui(TkFieldGui):
         self, master, gui_data: parsing.OptionGuiData, field: jsondb.OptionField
     ):
         super().__init__(master, gui_data, field)
-        #self.label.pack(side="top", fill="x", expand=True)
+        # self.label.pack(side="top", fill="x", expand=True)
         self.ops_selector = OptionalDropdown(
-            master=self.config_frame, json_value=gui_data.operator, label="operation"
+            master=self.frame_config, json_value=gui_data.operator, label="operation"
         )
         if gui_data.multi_selection:
-            self.pack_configs([[self.accept_na_button], [self.ops_selector]])
-            self.config_frame.pack(side="top")
+            self.pack_configs([[self.button_acceptNA], [self.ops_selector]])
+            self.frame_config.pack(side="top")
             self.selector = MultiSelector(
                 values=gui_data.field_spec["values"], master=self, height=5
             )
+            self.selector.select_all()
             self.selector.pack(side="top", expand=True, fill="y")
         else:
             self.pack_configs(
-                [[self.accept_na_button], [self.invert_button], [self.ops_selector]]
+                [[self.button_acceptNA], [self.button_invert], [self.ops_selector]]
             )
-            self.config_frame.pack(side="top")
+            self.frame_config.pack(side="top")
             values = gui_data.field_spec["values"].copy()
             if field.optional:
                 values = [VALUE_ANY] + values
@@ -316,18 +324,18 @@ class TkOptionGui(TkFieldGui):
 
     def get_kwargs(self):
         args = {
-            "invert": self.invert_var.get()
+            "invert": self.var_invert.get()
             if not self.gui_data.multi_selection
             else False,
-            "accept_missing": self.accept_na_var.get(),
+            "accept_missing": self.var_acceptNA.get(),
             "operator": self.ops_selector.get(),
         }
         if self.gui_data.multi_selection:
             args["valid_values"] = jsondb.ValueSet(self.selector.get_selection())
         else:
             args["valid_values"] = self.selector.get()
-        if not args["valid_values"] or args["valid_values"] == VALUE_ANY:
-            return None
+            if args["valid_values"] == VALUE_ANY:
+                return None
         return args
 
 
@@ -342,14 +350,14 @@ class TkIntegerGui(TkFieldGui):
         self, master, gui_data: parsing.IntegerGuiData, field: jsondb.IntegerField
     ):
         super().__init__(master, gui_data, field)
-        #self.label.pack(side="top", fill="x", expand=True)
+        # self.label.pack(side="top", fill="x", expand=True)
         self.comp_selector = OptionalDropdown(
-            master=self.config_frame, json_value=gui_data.comparison, label="comparison"
+            master=self.frame_config, json_value=gui_data.comparison, label="comparison"
         )
         self.pack_configs(
-            [[self.accept_na_button], [self.invert_button], [self.comp_selector]]
+            [[self.button_acceptNA], [self.button_invert], [self.comp_selector]]
         )
-        self.config_frame.pack(side="top")
+        self.frame_config.pack(side="top")
         values = list(gui_data.listed)
         if field.optional:
             values = [VALUE_ANY] + values
@@ -367,7 +375,8 @@ class TkIntegerGui(TkFieldGui):
         value = self.field.bounded_value(int(float(value)))
         self.selector.set(value)
         return {
-            "accept_missing": self.accept_na_var.get(),
+            "accept_missing": self.var_acceptNA.get(),
+            "invert": self.var_invert.get(),
             "value": value,
             "comparison": self.comp_selector.get(),
         }
@@ -378,19 +387,26 @@ class TkTextGui(TkFieldGui):
 
     def __init__(self, master, gui_data: parsing.TextGuiData, field: jsondb.TextField):
         super().__init__(master, gui_data, field)
-        self.case_selector = OptionalDropdown(
-            master=self.config_frame, json_value=gui_data.case, label="case sensitive:"
+        self.frame_config_selectors = ttk.Frame(self)
+        self.selector_case = OptionalDropdown(
+            master=self.frame_config_selectors,
+            json_value=gui_data.case,
+            label="case sensitive:",
         )
-        self.mode_selector = OptionalDropdown(
-            master=self.config_frame,
+        self.selector_mode = OptionalDropdown(
+            master=self.frame_config_selectors,
             json_value=gui_data.operator,
             label="required lines:",
         )
         self.selector = tk.Text(master=self, wrap="word", height=5, width=30)
-        #self.label.pack(side="top", fill="x", expand=True)
-        self.accept_na_button.pack(side="top")
-        self.pack_configs([[self.case_selector], [self.mode_selector]])
-        self.config_frame.pack(side="top")
+        # self.label.pack(side="top", fill="x", expand=True)
+        self.pack_configs([[self.button_acceptNA], [self.button_invert]])
+        self.pack_configs(
+            [[self.selector_case], [self.selector_mode]],
+            master=self.frame_config_selectors,
+        )
+        self.frame_config.pack(side="top", fill="x")
+        self.frame_config_selectors.pack(side="top", fill="x")
         self.selector.pack(side="top", expand=True, fill="both")
 
     def get_kwargs(self):
@@ -399,9 +415,10 @@ class TkTextGui(TkFieldGui):
         if not values:
             return None
         return {
-            "accept_missing": self.accept_na_var.get(),
-            "operator": self.mode_selector.get(),
-            "case": eval(self.case_selector.get()),
+            "accept_missing": self.var_acceptNA.get(),
+            "invert": self.var_invert.get(),
+            "operator": self.selector_mode.get(),
+            "case": eval(self.selector_case.get()),
             "value": values,
         }
 

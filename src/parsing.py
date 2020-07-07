@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from . import version
 from .json_utils import jsonplus as json
 from .json_utils import jsondb
-from.utils import NocaseList
+from .utils import NocaseList
 
 __author__ = "Quentin Soubeyran"
 __copyright__ = "Copyright 2020, SAJE project"
@@ -224,7 +224,9 @@ class GuiDataBase:
         return GuiDataBase.CLASSES[type_](json_obj)
 
     @classmethod
-    def coerce(cls, json_obj, key, type_, default=None, is_array=False, valid_values=None):
+    def coerce(
+        cls, json_obj, key, type_, default=None, is_array=False, valid_values=None
+    ):
         """
         Verifies the values from the json are valid, and return them
 
@@ -233,7 +235,7 @@ class GuiDataBase:
             key         : the key to extract value from
             type_       : the python type of values. Raises TypeError if the extracted type is wrong
             default     : the default value.  Raise ValueError if default is `None` and the json has not value for the specified key
-            is_array   : `False`: value cannot be an array. `False`: value can be an Array of value. `True`: value must be as Array
+            is_array   : `False`: value cannot be an array. `None`: value can be an Array of value. `True`: value must be as Array
             valid_values: the list of valid values, if any
         
         Returns:
@@ -292,7 +294,7 @@ class GuiDataBase:
 
 class OptionGuiData(GuiDataBase):
     """
-    Parses the json obejct and stores the Field object and GUI data for an Option field
+    Parses the json object and stores the Field object and GUI data for an Option field
     """
 
     TYPE = jsondb.OptionField.TYPE

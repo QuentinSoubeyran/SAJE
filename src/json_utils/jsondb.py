@@ -124,7 +124,9 @@ class FieldBase:
             True if the object passes the test, false otherwise
         """
         if json.has(json_obj, self.key):
-            return bool(invert) ^ bool(self.test(json.get(json_obj, self.key), **kwargs))
+            return bool(invert) ^ bool(
+                self.test(json.get(json_obj, self.key), **kwargs)
+            )
         else:
             return accept_missing
 
@@ -312,7 +314,6 @@ class IntegerField(FieldBase):
             json_repr["max"] = self.max_
 
 
-
 class TextField(FieldBase):
     """
     Represent a Field for sub- searching
@@ -335,6 +336,7 @@ class TextField(FieldBase):
             return ops(subtxt in json_value for subtxt in value)
         else:
             return ops(subtxt.lower() in json_value.lower() for subtxt in value)
+
 
 class Database:
     """
