@@ -4,9 +4,10 @@
 Small library that extends python's built-in json library with various utilities
 """
 # Built-in modules
-import enum
 from collections.abc import Mapping, Sequence
-from json import *
+import enum
+from json import * # pylint:disable=unused-wildcard-import
+from typing import Union, Dict, List, Tuple, NamedTuple, Callable, TypeVar
 
 __author__ = "Quentin Soubeyran"
 __copyright__ = "Copyright 2020, SAJE project"
@@ -14,6 +15,20 @@ __license__ = "MIT"
 __version__ = "0.2.0"
 __maintainer__ = "Quentin Soubeyran"
 __status__ = "beta"
+
+T = TypeVar("T")
+U = TypeVar("U")
+
+JsonValue = Union[None, bool, int, float, str]
+JsonArray = List["Json"]
+JsonObject = Dict[str, "Json"]
+Json = Union[
+    JsonValue,
+    JsonArray,
+    JsonObject
+]
+FlatKey = Tuple[Union[int, str], ...]
+FlatJson = List[Tuple[FlatKey, JsonValue]]
 
 # keep the type
 set_type = set
@@ -63,62 +78,62 @@ class InvalidJsonTypeError(JsonTypeError):
         self.expected = expected
         self.message = message
 
-
 class Type(enum.Enum):
     """
     Represents the JSON type of a python structure as returned by the json module.
     """
-
-    Object = object()
-    Array = object()
     Value = object()
+    Array = object()
+    Object = object()
 
     @classmethod
     def _missing_(cls, value):
         return cls.of(value)
 
     @staticmethod
-    def of(json_obj):
+    def of(json_obj: Json) -> "Type":
         """Return the JSON type of an object"""
         if isinstance(json_obj, Mapping):
             return Type.Object
         elif (not isinstance(json_obj, str)) and isinstance(json_obj, Sequence):
             return Type.Array
         elif (
-            isinstance(json_obj, int)
-            or isinstance(json_obj, str)
+            json_obj is None
             or isinstance(json_obj, bool)
+            or isinstance(json_obj, int)
+            or isinstance(json_obj, float)
+            or isinstance(json_obj, str)
         ):
             return Type.Value
         else:
             raise NotAJsonTypeError(type(json_obj))
 
     @staticmethod
-    def is_boolean(json_obj):
+    def is_boolean(json_obj: Json) -> bool:
         return isinstance(json_obj, bool)
 
     @staticmethod
-    def is_numeric(json_obj):
+    def is_numeric(json_obj: Json) -> bool:
         return isinstance(json_obj, int) or isinstance(json_obj, float)
 
     @staticmethod
-    def is_string(json_obj):
+    def is_string(json_obj: Json) -> bool:
         return isinstance(json_obj, str)
 
     @staticmethod
-    def check_value(json_obj):
+    def check_value(json_obj: Json):
         type_ = Type(json_obj)
         if type_ is not Type.Value:
             raise InvalidJsonTypeError(Type.Value, type_)
 
     @staticmethod
-    def check_array(json_obj):
+    def check_array(json_obj: Json):
         type_ = Type(json_obj)
         if type_ is not Type.Array:
             raise InvalidJsonTypeError(Type.Array, type_)
 
     @staticmethod
-    def check_object(json_obj):
+    def check_object(json_obj: Json):
         type_ = Type(json_obj)
         if type_ is not Type.Object:
             raise InvalidJsonTypeError(Type.Object, type_)
@@ -127,12 +142,12 @@ class Type(enum.Enum):
 Object, Array, Value = Type.Object, Type.Array, Type.Value
 
 
-def flatten(json_obj: dict):
+def flatten(json_obj: JsonObject) -> FlatJson:
     """
     Flatten a json as a list of key-value pairs where the key is the list of keys from the root to the value
     """
 
-    def walker(flat_json, keys, json_obj):
+    def walker(flat_json: List, keys: Tuple[str], json_obj: Json):
         type_ = Type.of(json_obj)
         if type_ is Type.Object:
             for key, subjson in json_obj.items():
@@ -150,7 +165,7 @@ def flatten(json_obj: dict):
     return flat_json
 
 
-def expand(flat_json: list, dict_only=False):
+def expand(flat_json: FlatJson, *, dict_only=False) -> Json:
     def rec(flat, pkey):
         if not len(flat):
             raise ValueError("cannot convert empty flat json to json")
@@ -183,7 +198,7 @@ def expand(flat_json: list, dict_only=False):
     return rec(sorted(flat_json, key=lambda x: x[0]), tuple())
 
 
-def compact(json_obj, sep="."):
+def compact(json_obj: JsonObject, sep=".") -> JsonObject:
     """
     Returns a new dict-only json that is a copy of `json_obj` where keys with only one element are
     merged with their parent key
@@ -203,35 +218,31 @@ def compact(json_obj, sep="."):
 
 
 class JsonDifferenceError(Exception):
-    pass
+    """Base Exception for Json comparison"""
 
 
-class CommonKey:
+class CommonKey(NamedTuple):
     """Class representing a common json key with all the keys from the root to the value"""
-
-    def __init__(self, keys, l_value, r_value):
-        self.keys = keys
-        self.l_value = l_value
-        self.r_value = r_value
+    keys: Tuple[str]
+    l_value: Json
+    r_value: Json
 
 
 class DiffKey:
     """Class representing a json key with different value type"""
-
-    def __init__(self, keys, l_json, r_json):
-        self.keys = keys
-        self.l_json = l_json
-        self.r_json = r_json
+    keys: Tuple[str]
+    l_value: Json
+    r_value: Json
 
 
 def compare_jsons(
-    left_json,
-    right_json,
-    common_callback=CommonKey,
-    diff_callback=lambda *args: None,
-    strict_keys=False,
-    strict_types=False,
-):
+    left_json: JsonObject,
+    right_json: JsonObject,
+    common_callback: Callable[[FlatKey, Json, Json], T] = CommonKey,
+    diff_callback:Callable[[FlatKey, Json, Json], U]=lambda *args: None,
+    strict_keys:bool=False,
+    strict_types:bool=False,
+) -> List[Union[T, U]]:
     """
     Compare two jsons and call the appropriate callback on shared or different keys, gathering the results of
     the callbacks in the returned list. If a callback returns 'None', the key is ignored.
@@ -291,7 +302,7 @@ def compare_jsons(
     return json_compare([], tuple(), left_json, right_json)
 
 
-def get(obj, key, jtype=None, sep="."):
+def get(obj, key, jtype=None, *, sep="."):
     if jtype and not jtype in Type:
         raise TypeError(
             "jtype argument must be a member of %s%s"
@@ -319,7 +330,7 @@ def get(obj, key, jtype=None, sep="."):
 
 def has(obj, key, jtype=None, sep="."):
     try:
-        get(obj, key, jtype, sep)
+        get(obj, key, jtype, sep=sep)
         return True
     except KeyError:
         return False

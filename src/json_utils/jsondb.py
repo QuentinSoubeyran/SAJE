@@ -11,6 +11,7 @@ certain criteria
 A `Database` represents an association of data and fields to search on that data
 """
 # Built-in modules
+from abc import ABC, abstractmethod
 import enum
 import copy
 import warnings
@@ -78,7 +79,7 @@ class Operator(enum.Enum):
                 return member
 
 
-class FieldBase:
+class SearchFieldBase(ABC):
     """
     Represent a search field in a database. Base class, should not be instanciated
 
@@ -96,18 +97,18 @@ class FieldBase:
         super().__init_subclass__(**kwargs)
         cls.CLASSES[cls.TYPE] = cls
 
-    def __init__(self, key, optional=True):
+    def __init__(self, key=None, *, optional=True):
         """
-        Create a new Field object to search through JSON-like objects
+        Create a new SearchField object to search through JSON-like objects
         
         Args:
             key: the JSON path inside object that leads to the value this fields compares to
-            optional: whether this field should always check or allows any item is no value is provided
+            optional: whether this field should always check or allows any item if no value is provided
         """
         self.key = key
         self.optional = bool(optional)
 
-    def compare(self, json_obj, accept_missing=True, invert=False, **kwargs):
+    def compare(self, json_obj: json.JsonObject, key=None, *, accept_missing=True, invert=False, **kwargs):
         """
         Returns wether the json object matches with the value for this field
 
@@ -130,13 +131,11 @@ class FieldBase:
         else:
             return accept_missing
 
+    @abstractmethod
     def test(self, json_value, **kwargs):
         """
-        Performs the test on the value of the JSON object. Must be defined by subclass
+        Performs the test on the value of the JSON object
         """
-        raise NotImplementedError(
-            "Subclasses of FieldBase must implement the test() method"
-        )
 
     def to_json(self):
         """
@@ -155,8 +154,7 @@ class FieldBase:
 
     def _add_json_values(self, json_repr):
         """
-        Add subclass-specific element to the json representation of that field.
-        Must be defined by subclass
+        Add subclass-specific element to the json representation of that field
         """
         pass
 
@@ -177,9 +175,9 @@ class FieldBase:
         if "type" not in json_repr:
             raise ValueError("Invalid field json representation: must have key `type`")
         type_ = json_repr["type"]
-        if type_ not in FieldBase.CLASSES:
+        if type_ not in SearchFieldBase.CLASSES:
             raise TypeError("Unknown field type `%s`" % type_)
-        return FieldBase.CLASSES[type_]._make(json_repr, data=data)
+        return SearchFieldBase.CLASSES[type_]._make(json_repr, data=data)
 
     @classmethod
     def _make(cls, json_repr, data=[]):
@@ -196,7 +194,7 @@ class FieldBase:
         )
 
 
-class OptionField(FieldBase):
+class OptionField(SearchFieldBase):
     """
     Represent a search field that may take one value from a set of possible values
     """
@@ -263,7 +261,7 @@ class OptionField(FieldBase):
     #   as the value set
 
 
-class IntegerField(FieldBase):
+class IntegerField(SearchFieldBase):
     """
     Represent a search field for integer values
     """
@@ -314,7 +312,7 @@ class IntegerField(FieldBase):
             json_repr["max"] = self.max_
 
 
-class TextField(FieldBase):
+class TextField(SearchFieldBase):
     """
     Represent a Field for sub- searching
     """
@@ -416,7 +414,7 @@ class Database:
             else:
                 data.append(json_obj)
         fields = {
-            name: FieldBase.from_json(json_field, data=data)
+            name: SearchFieldBase.from_json(json_field, data=data)
             for name, json_field in json_db["fields"].items()
         }
         return Database(data=data, fields=fields)
