@@ -120,7 +120,7 @@ class IfKeyDS(DisplayString):
     
     def format(self, json_obj):
         if json.has(json_obj, self.key):
-            return self.display_string.format(json.get(json_obj, self.key))
+            return self.display_string.format()
         return ""
 
 class JsonTypeDS(DisplayString):
@@ -128,22 +128,25 @@ class JsonTypeDS(DisplayString):
     Handles an if on JSON types
     """
 
-    KEYWORDS = {"if_json_value", "if_json_array", "if_json_object"}
+    KEYWORDS = {"if_json_type", "json_value", "json_array", "json_object"}
 
     def __init__(self, json_obj):
+        self.key = json_obj["if_json_type"]
         self.table = {
             key: self.from_json(json_obj[key])
-            for key in self.KEYWORDS
+            for key in {"json_value", "json_array", "json_object"}
         }
     
     def format(self, json_obj):
-        t = json.Type(json_obj)
-        if t is json.Value:
-            return self.table["if_json_value"].format(json_obj)
-        elif t is json.Array:
-            return self.table["if_json_array"].format(json_obj)
-        elif t is json.Object:
-            return self.table["if_json_object"].format(json_obj)
+        if json.has(json_obj, self.key):
+            t = json.Type(json.get(json_obj, self.key))
+            if t is json.Value:
+                return self.table["json_value"].format(json_obj)
+            elif t is json.Array:
+                return self.table["json_array"].format(json_obj)
+            elif t is json.Object:
+                return self.table["json_object"].format(json_obj)
+        return "<ERROR: key '%s' not found>" % self.key
 
 class TableDS(DisplayString):
     """
@@ -191,7 +194,7 @@ class ForallDS(DisplayString):
                 self.display_string.format(e)
                 for e in json_obj
             )
-        elif t is json.Object:
+        elif r is json.Object:
             if json.has(json_obj, self.key):
                 return self.sep.join(
                     self.display_string.format(sub_json)
