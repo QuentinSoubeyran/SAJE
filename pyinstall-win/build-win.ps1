@@ -1,7 +1,8 @@
 $HERE=Get-Location | select -ExpandProperty Path
-rm -rf build/
-rm -rf dist/
 cd ..
-$VERSION=python3 -c "from src import version; print(version.__version__)"
+Write-Host "VERSION: " -NoNewLine
+python -c "from src import version; print(version.__version__)" | Tee-Object -Variable VERSION
 cd "$HERE"
+Remove-Item -path build/ -recurse
+Remove-Item -path dist/ -recurse
 pyinstaller --clean --name "saje-$VERSION" --onefile ../main.py
