@@ -185,12 +185,21 @@ class ForallDS(DisplayString):
         self.sep = json_obj.get("separator", "")
 
     def format(self, json_obj):
-        if json.has(json_obj, self.key):
+        t = json.Type(json_obj)
+        if t is json.Array:
             return self.sep.join(
-                self.display_string.format(sub_json)
-                for sub_json in json.get(json_obj, self.key)
+                self.display_string.format(e)
+                for e in json_obj
             )
-        return ""
+        elif t is json.Object:
+            if json.has(json_obj, self.key):
+                return self.sep.join(
+                    self.display_string.format(sub_json)
+                    for sub_json in json.get(json_obj, self.key)
+                )
+            return ""
+        else:
+            return "<ERROR: cannot use forall display string on value>"
 
 
 
