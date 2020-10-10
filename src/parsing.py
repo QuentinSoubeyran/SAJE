@@ -107,6 +107,43 @@ class ArrayDS(DisplayString):
     def format(self, json_obj):
         return "".join(ds.format(json_obj) for ds in self.display_strings)
 
+class IfKeyDS(DisplayString):
+    """
+    Handles displaying conditional on the presence of a key
+    """
+
+    KEYWORDS = {"if_key", "display_string"}
+
+    def __init__(self, json_obj):
+        self.key = json_obj["if_key"]
+        self.display_string = json_obj["display_string"]
+    
+    def format(self, json_obj):
+        if json.has(json_obj, self.key):
+            return self.display_string.format(json.get(json_obj, self.key))
+        return ""
+
+class JsonTypeDS(DisplayString):
+    """
+    Handles an if on JSON types
+    """
+
+    KEYWORDS = {"if_json_value", "if_json_array", "if_json_object"}
+
+    def __init__(self, json_obj):
+        self.table = {
+            key: self.from_json(json_obj[key])
+            for key in self.KEYWORDS
+        }
+    
+    def format(self, json_obj):
+        t = json.Type(json_obj)
+        if t is json.Value:
+            return self.table["if_json_value"].format(json_obj)
+        elif t is json.Array:
+            return self.table["if_json_array"].format(json_obj)
+        elif t is json.Object:
+            return self.table["if_json_object"].format(json_obj)
 
 class TableDS(DisplayString):
     """
@@ -154,6 +191,8 @@ class ForallDS(DisplayString):
                 for sub_json in json.get(json_obj, self.key)
             )
         return ""
+
+
 
 
 def parse_file(json_file, filename):
