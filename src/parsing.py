@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from . import version
 from .json_utils import jsonplus as json
 from .json_utils import jsondb
-from .utils import NocaseList
+from .utils import NocaseList, err_str
 
 __author__ = "Quentin Soubeyran"
 __copyright__ = "Copyright 2020, SAJE project"
@@ -45,31 +45,54 @@ class DisplayString(ABC):
 
     @classmethod
     def from_json(cls, json_obj):
+        obj = None
         if json_obj is None:
-            return DefaultDS()
+            obj = DefaultDS()
         type_ = json.Type(json_obj)
         if type_ is json.Value:
-            return StringDS(json_obj)
+            obj = StringDS(json_obj)
         elif type_ is json.Array:
-            return ArrayDS(json_obj)
+            obj = ArrayDS(json_obj)
         elif type_ is json.Object:
             json_kw = set(json_obj)
             for keywords, class_ in cls.CLASSES:
                 if keywords & json_kw == keywords:
-                    return class_(json_obj)
+                    obj = class_(json_obj)
+                    break
+            else:
+                raise ValueError(
+                    "No display_string object matches the keywords %s" % json_kw
+                )
+        if obj is None:
             raise ValueError(
-                "No display_string object matches the keywords %s" % json_kw
+                "Cannot parse display string definition:\n%s"
+                % json.dumps(json_obj, indent=4)
             )
+        obj.definition = json.dumps(json_obj, indent=4)
+        return obj
 
-    @abstractmethod
     def format(self, json_obj):
         """
         Returns the display string for the passed json object
         """
+        try:
+            return self._format(json_obj)
+        except Exception as err:
+            return (
+                f"&lt;&lt;ERROR: {err_str(err)}\n"
+                f"JSON VALUE:\n{json.dumps(json_obj, indent=4)}\n"
+                f"DISPLAY STRING DEF:\n{getattr(self, 'definition', '--Unknown--')}\n&gt;&gt;"
+            )
+    
+    @abstractmethod
+    def _format(self, json_obj):
+        """
+        the actual format implementation
+        """
 
 
 class DefaultDS(DisplayString):
-    def format(self, json_obj):
+    def _format(self, json_obj):
         return json.dumps(json_obj, indent=2)
 
 
@@ -81,7 +104,7 @@ class StringDS(DisplayString):
     def __init__(self, string):
         self.string = str(string)
 
-    def format(self, json_obj):
+    def _format(self, json_obj):
         type_ = json.Type(json_obj)
         if type_ is json.Object:
             return self.string.format(
@@ -91,7 +114,7 @@ class StringDS(DisplayString):
                 }
             )
         elif type_ is json.Array:
-            return self.string.format(json_obj)
+            return self.string.format(*json_obj)
         else:
             return self.string.format(value=json_obj)
 
@@ -104,7 +127,7 @@ class ArrayDS(DisplayString):
     def __init__(self, json_obj):
         self.display_strings = [self.from_json(sub_json) for sub_json in json_obj]
 
-    def format(self, json_obj):
+    def _format(self, json_obj):
         return "".join(ds.format(json_obj) for ds in self.display_strings)
 
 class IfKeyDS(DisplayString):
@@ -116,11 +139,11 @@ class IfKeyDS(DisplayString):
 
     def __init__(self, json_obj):
         self.key = json_obj["if_key"]
-        self.display_string = json_obj["display_string"]
+        self.display_string = self.from_json(json_obj["display_string"])
     
-    def format(self, json_obj):
+    def _format(self, json_obj):
         if json.has(json_obj, self.key):
-            return self.display_string.format()
+            return self.display_string.format(json_obj)
         return ""
 
 class JsonTypeDS(DisplayString):
@@ -137,7 +160,7 @@ class JsonTypeDS(DisplayString):
             for key in {"json_value", "json_array", "json_object"}
         }
     
-    def format(self, json_obj):
+    def _format(self, json_obj):
         if json.has(json_obj, self.key):
             t = json.Type(json.get(json_obj, self.key))
             if t is json.Value:
@@ -146,7 +169,7 @@ class JsonTypeDS(DisplayString):
                 return self.table["json_array"].format(json_obj)
             elif t is json.Object:
                 return self.table["json_object"].format(json_obj)
-        return "<ERROR: key '%s' not found>" % self.key
+        raise KeyError(self.key)
 
 class TableDS(DisplayString):
     """
@@ -167,7 +190,7 @@ class TableDS(DisplayString):
                 "table display_string requires a default under the empty key"
             )
 
-    def format(self, json_obj):
+    def _format(self, json_obj):
         if json.has(json_obj, self.key):
             value = json.get(json_obj, self.key)
             if value in self.table:
@@ -187,14 +210,14 @@ class ForallDS(DisplayString):
         self.display_string = self.from_json(json_obj["display_string"])
         self.sep = json_obj.get("separator", "")
 
-    def format(self, json_obj):
+    def _format(self, json_obj):
         t = json.Type(json_obj)
         if t is json.Array:
             return self.sep.join(
                 self.display_string.format(e)
                 for e in json_obj
             )
-        elif r is json.Object:
+        elif t is json.Object:
             if json.has(json_obj, self.key):
                 return self.sep.join(
                     self.display_string.format(sub_json)
@@ -202,7 +225,7 @@ class ForallDS(DisplayString):
                 )
             return ""
         else:
-            return "<ERROR: cannot use forall display string on value>"
+            raise ValueError("ERROR: cannot use forall display string on value")
 
 
 

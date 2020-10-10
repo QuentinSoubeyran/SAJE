@@ -536,7 +536,7 @@ class MainApp(common.AbstractMainApp, tk.Tk):
                     parsed_file=parsed_file,
                     gui_dict=gui_dict,
                     master_frame=sub_frame,
-                    side_id=side_id + 1 % 2,
+                    side_id=(side_id + 1) % 2,
                     nested_geometry=element,
                 )
                 sub_frame.pack(
