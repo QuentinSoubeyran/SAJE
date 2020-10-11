@@ -21,9 +21,11 @@ __maintainer__ = "Quentin Soubeyran"
 __status__ = version.__status__
 
 CACHE_KEY = "__CACHED_DISPLAY_STRING__"
+MISSING = object()
+MAYBE = object()
 
 ParsedFile = namedtuple(
-    "ParsedFile", ["name", "display_string", "gui_geometry", "gui_datas", "database"]
+    "ParsedFile", ["name", "display_string", "gui_geometry", "gui_datas", "database", "modes"]
 )
 
 
@@ -249,6 +251,7 @@ def parse_file(json_file, filename):
         field_dict={}, field_geometry=[], field_nested_list=json_file["fields"]
     )
     fields = {name: gui_data.field_spec for name, gui_data in field_dict.items()}
+    modes = set.union(gui_data.modes or set() for gui_data in field_dict)
     return ParsedFile(
         name=json_file.get("name", filename),
         display_string=DisplayString.from_json(json_file.get("display_string")),
@@ -257,6 +260,7 @@ def parse_file(json_file, filename):
         database=jsondb.Database.from_json(
             {"fields": fields, "data": json_file["data"]}
         ),
+        modes=modes
     )
 
 
@@ -288,6 +292,11 @@ class GuiDataBase:
 
     def __init__(self, json_obj):
         self.name = self.coerce(json_obj, "name", str)
+        self.modes = self.coerce(json_obj, "modes", str, default=None, is_array=MAYBE)
+        if isinstance(self.modes, list):
+            self.modes = set(self.modes)
+        elif isinstance(self.modes, str):
+            self.modes = set([self.modes])
 
     @staticmethod
     def parse_json(json_obj):
@@ -299,7 +308,7 @@ class GuiDataBase:
 
     @classmethod
     def coerce(
-        cls, json_obj, key, type_, default=None, is_array=False, valid_values=None
+        cls, json_obj, key, type_, default=MISSING, is_array=False, valid_values=None
     ):
         """
         Verifies the values from the json are valid, and return them
@@ -308,8 +317,8 @@ class GuiDataBase:
             json_obj    : the json object to extract values from
             key         : the key to extract value from
             type_       : the python type of values. Raises TypeError if the extracted type is wrong
-            default     : the default value.  Raise ValueError if default is `None` and the json has not value for the specified key
-            is_array   : `False`: value cannot be an array. `None`: value can be an Array of value. `True`: value must be as Array
+            default     : the default value.  Raise ValueError if default is `MISSING` and the json has not value for the specified key
+            is_array   : `False`: value cannot be an array. `MAYBE`: value can be an Array of value. `True`: value must be as Array
             valid_values: the list of valid values, if any
         
         Returns:
@@ -320,7 +329,7 @@ class GuiDataBase:
             ValueError if the value is not in valid_values
         """
         if key not in json_obj:
-            if default is not None:
+            if default is not MISSING:
                 return default
             else:
                 raise ValueError(
@@ -331,13 +340,13 @@ class GuiDataBase:
         if jtype is json.Object:
             raise TypeError("Field options cannot be json Objects")
         elif jtype is json.Array:
-            if not is_array and is_array is not None:
+            if not is_array and is_array is not MAYBE:
                 raise TypeError(
                     "Option '%s' of %s field cannot be an Array" % (key, cls.NAME)
                 )
             coerced = value
         else:
-            if is_array:
+            if is_array and is_array is not MAYBE:
                 raise TypeError(
                     "Option '%s' of %s field must be an Array" % (key, cls.NAME)
                 )

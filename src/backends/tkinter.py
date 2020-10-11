@@ -4,6 +4,7 @@
 Tkinter backend for SAJE project
 """
 # Built-in modules
+import functools
 import math
 import logging
 import tkinter as tk
@@ -161,6 +162,55 @@ class MultiSelector(ttk.Treeview):
         self.selection_toggle(*self.get_children())
 
 
+class CallbackMultiSelector(MultiSelector):
+    def __init__(self, *args, callback=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._callback_ = callback
+        self._active_ = True
+    
+    @staticmethod
+    def with_callback(method):
+        def wrapped(self, *args, **kwargs):
+            reactivate = self._active_
+            self._active_ = False
+            method(self, *args, **kwargs)
+            if reactivate:
+                self._callback_()
+                self._active_ = True
+        return wrapped
+
+    @with_callback
+    def set_values(self, values):
+        super().set_values(values)
+    
+    @with_callback
+    def set_selection(self, values):
+        super().set_selection(values)
+    
+    @with_callback
+    def selection_remove(self, *args, **kwargs):
+        super().selection_remove(*args, **kwargs)
+    
+    @with_callback
+    def selection_add(self, *args, **kwargs):
+        super().selection_add(*args, **kwargs)
+    
+    @with_callback
+    def selection_toggle(self, *args, **kwargs):
+        super().selection_toggle(*args, **kwargs)
+    
+    @with_callback    
+    def select_all(self):
+        super().select_all()
+
+    @with_callback
+    def select_clear(self):
+        super().select_clear()
+
+    @with_callback
+    def select_toggle(self):
+        super().select_toggle()
+
 class OptionalDropdown:
     """
     If a single value is passed, just returns the value, else has a graphic component
@@ -237,6 +287,7 @@ class TkFieldGui(common.AbstractKwargsProvider, ttk.LabelFrame):
         super().__init__(master, text=gui_data.name)
         self.gui_data = gui_data
         self.field = field
+        self.hidden = True
         # self.label = ttk.Label(master=self, text=gui_data.name)
         self.frame_config = ttk.Frame(self)
         self.var_acceptNA = tk.BooleanVar(self.frame_config, value=True)
@@ -257,6 +308,16 @@ class TkFieldGui(common.AbstractKwargsProvider, ttk.LabelFrame):
             variable=self.var_invert,
         )
         self.var_invert.set(False)
+    
+    def show(self):
+        if self.hidden:
+            self.frame_config.pack(side="top", fill="x")
+            self.hidden = False
+    
+    def hide(self):
+        if not self.hidden:
+            self.frame_config.pack_forget()
+            self.hidden = True
 
     def pack_configs(self, widgets_groups, *, master=None):
         """
@@ -305,22 +366,32 @@ class TkOptionGui(TkFieldGui):
         )
         if gui_data.multi_selection:
             self.pack_configs([[self.button_acceptNA], [self.ops_selector]])
-            self.frame_config.pack(side="top")
             self.selector = MultiSelector(
                 values=gui_data.field_spec["values"], master=self, height=5
             )
             self.selector.select_all()
-            self.selector.pack(side="top", expand=True, fill="y")
         else:
             self.pack_configs(
                 [[self.button_acceptNA], [self.button_invert], [self.ops_selector]]
             )
-            self.frame_config.pack(side="top")
             values = gui_data.field_spec["values"].copy()
             if field.optional:
                 values = [VALUE_ANY] + values
             self.selector = Dropdown(master=self, values=values, interactive=False)
-            self.selector.pack(side="top")
+        self.show()
+    
+    def show(self):
+        if self.hidden:
+            super().show()
+            if self.gui_data.multiselection:
+                self.selector.pack(side="top", expand=True, fill="y")
+            else:
+                self.selector.pack(side="top")
+        
+    def hide(self):
+        if not self.hidden:
+            super().hide()
+            self.selector.pack_forget()
 
     def get_kwargs(self):
         args = {
@@ -366,7 +437,17 @@ class TkIntegerGui(TkFieldGui):
             self.selector.set(VALUE_ANY)
         else:
             self.selector.set(field.min_ or field.max_ or 0)
-        self.selector.pack(side="top")
+        self.show()
+    
+    def show(self):
+        if self.hidden:
+            super().show()
+            self.selector.pack(side="top")
+    
+    def hide(self):
+        if not self.hidden:
+            super().hide()
+            self.selector.pack_forget()
 
     def get_kwargs(self):
         value = self.selector.get()
@@ -405,9 +486,20 @@ class TkTextGui(TkFieldGui):
             [[self.selector_case], [self.selector_mode]],
             master=self.frame_config_selectors,
         )
-        self.frame_config.pack(side="top", fill="x")
-        self.frame_config_selectors.pack(side="top", fill="x")
-        self.selector.pack(side="top", expand=True, fill="both")
+        self.show()
+        
+    
+    def show(self):
+        if self.hidden:
+            super().show()
+            self.frame_config_selectors.pack(side="top", fill="x")
+            self.selector.pack(side="top", expand=True, fill="both")
+    
+    def hide(self):
+        if not self.hidden:
+            super().hide()
+            self.frame_config_selectors.pack_forget()
+            self.selector.pack_forget()
 
     def get_kwargs(self):
         text = self.selector.get("1.0", "end-1c")
@@ -490,8 +582,19 @@ class MainApp(common.AbstractMainApp, tk.Tk):
         tab.search = ttk.Frame(tab.frame)
         # Search Area content
         ## Search Button
-        tab.search_button_gui = TkSearchButton(tab.search)
-        tab.search_button_gui.pack(side="top", expand=True, fill="both")
+        tab.search_frame = ttk.Frame(tab.search)
+        tab.search_button_gui = TkSearchButton(tab.search_frame)
+        tab.gui_dict = {}
+        if len(parsed_file.modes > 1):
+            tab.modes_selector = CallbackMultiSelector(
+                master=tab.search_frame,
+                values=parsed_file.modes,
+                callback=functools.partial(self.on_modes, tab)
+            )
+            tab.modes_selector.select_all()
+            tab.modes_selector.pack(side="left", expand=True, fill="both")
+        tab.search_button_gui.pack(side="right", expand=True, fill="both")
+        tab.search_frame.pack(side="top", expand=True, fill="both")
         ## Search Fields
         tab.gui_dict = self.make_guis(parsed_file, tab.search)
         # Result Area Content
@@ -507,6 +610,15 @@ class MainApp(common.AbstractMainApp, tk.Tk):
             )
         )
         return tab
+    
+    def on_modes(self, tab):
+        modes = set(tab.modes_selector.get_selection())
+        for gui in tab.gui_dict.values():
+            if gui.gui_data.modes is not None:
+                if modes & gui.gui_data.modes:
+                    gui.show()
+                else:
+                    gui.hide()
 
     def make_guis(self, parsed_file: parsing.ParsedFile, search_frame: ttk.Frame):
         return self.make_nested_guis(

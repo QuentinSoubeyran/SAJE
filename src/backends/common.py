@@ -175,6 +175,10 @@ class AbstractMainApp(ABC):
         raise NotImplementedError(
             "MainAppCommon subclasses must implement a new_tab() method"
         )
+    
+    @abstractmethod
+    def on_modes(self):
+        """Adapts the display after a change of modes"""
 
     @abstractmethod
     def start(self):
