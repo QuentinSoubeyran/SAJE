@@ -6,6 +6,7 @@ Module for file parsing utilities of the SAJE project
 # Built-in modules
 from collections import namedtuple
 from abc import ABC, abstractmethod
+import warnings
 
 # Local modules
 from . import version
@@ -193,8 +194,15 @@ class TableDS(DisplayString):
     def _format(self, json_obj):
         if json.has(json_obj, self.key):
             value = json.get(json_obj, self.key)
-            if value in self.table:
-                return self.table[value].format(json_obj)
+            try:
+                if value in self.table:
+                    return self.table[value].format(json_obj)
+            except Exception as err:
+                warnings.warn(
+                    f"Encountered {err_str(err)} in Table Display String\n"
+                    f"JSON OBJECT:\n{json.dumps(json_obj, indent=4)}"
+                    f"DISPLAY STRING DEF:\n{getattr(self, 'definition', '--unknonwn--')}"
+                )
         return self.table[""].format(json_obj)
 
 
@@ -228,6 +236,10 @@ class ForallDS(DisplayString):
             raise ValueError("ERROR: cannot use forall display string on value")
 
 
+def get_display(display_string, json_obj):
+    if CACHE_KEY not in json_obj:
+        json_obj[CACHE_KEY] = display_string.format(json_obj)
+    return json_obj[CACHE_KEY]
 
 
 def parse_file(json_file, filename):
@@ -260,10 +272,7 @@ def parse_file(json_file, filename):
     )
 
 
-def get_display(display_string, json_obj):
-    if CACHE_KEY not in json_obj:
-        json_obj[CACHE_KEY] = display_string.format(json_obj)
-    return json_obj[CACHE_KEY]
+
 
 
 class GuiDataBase:
