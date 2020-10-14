@@ -4,12 +4,8 @@
 Utility module for the SAJE project
 """
 
-# Built-in modules
 from traceback import format_exception_only
 
-# Thrid party modules
-
-# Local modules
 from . import version
 
 __author__ = "Quentin Soubeyran"

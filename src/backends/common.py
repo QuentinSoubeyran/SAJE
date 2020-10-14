@@ -9,15 +9,11 @@ to understand how the backend class can handle multiple inheritance (see backend
 for examples
 """
 
-# Built-in modules
 import logging
 import traceback
 from abc import ABC, abstractmethod
 
-# Local modules
-from .. import version
-from .. import parsing
-from .. import utils
+from .. import parsing, utils, version
 
 __author__ = "Quentin Soubeyran"
 __copyright__ = "Copyright 2020, SAJE project"
@@ -64,11 +60,13 @@ class AbstractSearchCallback(ABC):
         search_button: AbstractKwargsProvider,
         gui_dict,
         display: AbstractHTMLDisplay,
+        modes_getter,
     ):
         self.parsed_file = parsed_file
         self.search_button = search_button
         self.gui_dict = gui_dict
         self.display = display
+        self.modes_getter = modes_getter
 
     @abstractmethod
     def show_error(self, title="", message=""):
@@ -79,21 +77,34 @@ class AbstractSearchCallback(ABC):
             "SearchCallbackCommon subclasses must implement a show_error() method"
         )
 
+    @abstractmethod
+    def set_status(self, msg):
+        """
+        Display the current status
+        """
+
     def __call__(self):
+        self.set_status("Searching ...")
         try:
             search_args = {}
+            modes = self.modes_getter()
             for field_name, gui in self.gui_dict.items():
+                if modes is not None and gui.gui_data.modes is not None:
+                    if not set(modes) & gui.gui_data.modes:
+                        continue
                 kwargs = gui.get_kwargs()
                 if kwargs is not None:
                     search_args[field_name] = kwargs
             results = self.parsed_file.database.search(
                 criteria=search_args, **self.search_button.get_kwargs()
             )
-            html = "\n\n".join(
+            self.set_status("Rendering ...")
+            html = "\n".join(
                 parsing.get_display(self.parsed_file.display_string, result)
                 for result in results
             )
             self.display.display_html(html)
+            self.set_status("Found %s items" % len(results))
         except Exception as err:
             self.LOGGER.error(
                 "Error during search:\n%s\n%s",
@@ -103,6 +114,7 @@ class AbstractSearchCallback(ABC):
             self.show_error(
                 title="Search", message="Error during search:\n%s" % utils.err_str(err)
             )
+            self.set_status("error")
 
 
 class AbstractNotebook(ABC):
@@ -175,7 +187,7 @@ class AbstractMainApp(ABC):
         raise NotImplementedError(
             "MainAppCommon subclasses must implement a new_tab() method"
         )
-    
+
     @abstractmethod
     def on_modes(self):
         """Adapts the display after a change of modes"""

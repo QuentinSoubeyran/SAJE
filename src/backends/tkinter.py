@@ -3,25 +3,22 @@
 """
 Tkinter backend for SAJE project
 """
-# Built-in modules
 import functools
-import math
 import logging
+import math
 import tkinter as tk
-import tkinter.ttk as ttk
 import tkinter.filedialog
 import tkinter.messagebox
+import tkinter.ttk as ttk
+from typing import Literal, Union
 
-# Thrid party modules
 import tk_html_widgets as tk_html
 from dotmap import DotMap
 
-# Local modules
-from .. import version
+from .. import parsing, version
+from ..backends import common
 from ..json_utils import jsondb
 from ..json_utils import jsonplus as json
-from .. import parsing
-from ..backends import common
 
 __author__ = "Quentin Soubeyran"
 __copyright__ = "Copyright 2020, SAJE project"
@@ -33,6 +30,8 @@ __status__ = version.__status__
 LOGGER = logging.getLogger("SAJE.backend.tkinter")
 DEFAULT_SIZE = (1024, 768)  # width, height
 VALUE_ANY = "--Any--"
+
+GeometryType = list[Union["GeometryType", str]]
 
 
 class Dropdown(ttk.Combobox):
@@ -53,61 +52,89 @@ class Dropdown(ttk.Combobox):
         self.set(selected if selected in values else values[0])
 
 
-class MultiSelector(ttk.Treeview):
+class MultiSelector(ttk.Frame):
     """
     Widget to select/deselect multiple element in a list, with a scrollbar
     """
 
-    def __init__(self, master, values, *args, height=5, min_height=3, **kwargs):
-        self.frame_ = ttk.Frame(master=master)
-        super().__init__(
+    class MultiSelectorTree(ttk.Treeview):
+        def __init__(self, master, values, *args, height=5, min_height=3, **kwargs):
+            super().__init__(
+                *args,
+                master=master,
+                show="tree",
+                columns=[],
+                height=max(3, min(len(values), height)),
+                **kwargs
+            )
+            self.height_arg = height
+            self.min_height_arg = min_height
+            self.bind("<1>", self.on_click)
+
+        def on_click(self, event):
+            """
+            Toggle the selection of an item that is clicked on instead of
+            the default behavior that is to select only that item
+            """
+            item = self.identify("item", event.x, event.y)
+            if item:
+                if item in self.selection():
+                    self.selection_remove(item)
+                else:
+                    self.selection_add(item)
+                return "break"
+
+    def __init__(
+        self,
+        master,
+        values,
+        *args,
+        height=5,
+        min_height=3,
+        cls=MultiSelectorTree,
+        **kwargs
+    ):
+        super().__init__(master=master)
+        self.tree = cls(
             *args,
-            master=self.frame_,
-            show="tree",
-            columns=[],
+            master=self,
+            values=values,
             height=max(3, min(len(values), height)),
             **kwargs
         )
-        self.height_arg = height
-        self.min_height_arg = min_height
-        # self.column("cache", width=0, minwidth=0, stretch=False)
-        self.bind("<1>", self.on_click)
-        # Under buttons
-        self.button_frame = ttk.Frame(master=self.frame_)
-        self.button_all = ttk.Button(
-            master=self.button_frame, text="All", command=self.select_all
-        )
-        self.button_clear = ttk.Button(
-            master=self.button_frame, text="Clear", command=self.select_clear
-        )
-        self.button_toggle = ttk.Button(
-            master=self.button_frame, text="Toggle", command=self.select_toggle
-        )
-        self.button_frame.pack(side="bottom", fill="x")
-        self.button_all.pack(side="left", fill="x", expand=True)
-        self.button_clear.pack(side="left", fill="x", expand=True)
-        self.button_toggle.pack(side="left", fill="x", expand=True)
-        self.scrollbar_ = ttk.Scrollbar(
-            master=self.frame_, orient=tk.VERTICAL, command=self.yview
-        )
-        self.configure(yscrollcommand=self.scrollbar_.set)
-        self.scrollbar_.pack(side="right", expand=False, fill="y")
-        self.pack(side="left", expand=True, fill="both")
         self.id_value_map = {}
         self.set_values(values)
-        self.pack = self.frame_.pack
-        self.grid = self.frame_.grid
+        # Under buttons
+        self.button_all = ttk.Button(master=self, text="All", command=self.select_all)
+        self.button_clear = ttk.Button(
+            master=self, text="Clear", command=self.select_clear
+        )
+        self.button_toggle = ttk.Button(
+            master=self, text="Toggle", command=self.select_toggle
+        )
+        self.scrollbar_ = ttk.Scrollbar(
+            master=self, orient=tk.VERTICAL, command=self.tree.yview
+        )
+        self.tree.configure(yscrollcommand=self.scrollbar_.set)
+        self.button_all.grid(row=1, column=0, sticky="ew")
+        self.button_clear.grid(row=1, column=1, sticky="ew")
+        self.button_toggle.grid(row=1, column=2, sticky="ew")
+        self.scrollbar_.grid(row=0, rowspan=2, column=3, sticky="ns")
+        self.tree.grid(row=0, column=0, columnspan=3, sticky="nesw")
+        self.rowconfigure(0, weight=1)
+        for i in range(0, 3):
+            self.columnconfigure(i, weight=1)
 
     def adapt_display(self, item_number):
-        height = max(self.min_height_arg, min(item_number, self.height_arg))
-        self.config(height=height)
+        height = max(self.tree.min_height_arg, min(item_number, self.tree.height_arg))
+        self.tree.config(height=height)
 
     def set_values(self, values):
         selection = set(self.get_selection())
         self.select_clear()
-        self.delete(*self.get_children())
+        self.tree.delete(*self.tree.get_children())
         self.id_value_map = {
-            self.insert("", "end", text=str(value)): value for value in values
+            self.tree.insert("", "end", text=str(value)): value for value in values
         }
         self.set_selection(selection & set(values))
         self.adapt_display(len(values))
@@ -118,7 +145,7 @@ class MultiSelector(ttk.Treeview):
         """
         return [
             self.id_value_map[item]
-            for item in self.selection()
+            for item in self.tree.selection()
             if item in self.id_value_map
         ]
 
@@ -126,80 +153,71 @@ class MultiSelector(ttk.Treeview):
         """
         Set the current selection from a subset of 'values' passed to __init__
         """
-        self.selection_set(
-            [item for item in self.get_children() if self.id_value_map[item] in values]
+        self.tree.selection_set(
+            [
+                item
+                for item in self.tree.get_children()
+                if self.id_value_map[item] in values
+            ]
         )
-
-    def on_click(self, event):
-        """
-        Toggle the selection of an item that is clicked on instead of
-        the default behavior that is to select only that item
-        """
-        item = self.identify("item", event.x, event.y)
-        if item:
-            if item in self.selection():
-                self.selection_remove(item)
-            else:
-                self.selection_add(item)
-            return "break"
 
     def select_all(self):
         """
         Select all items
         """
-        self.selection_add(*self.get_children())
+        self.tree.selection_add(*self.tree.get_children())
 
     def select_clear(self):
         """
         Deselect all items
         """
-        self.selection_remove(*self.get_children())
+        self.tree.selection_remove(*self.tree.get_children())
 
     def select_toggle(self):
         """
         Toggle the selection of all items
         """
-        self.selection_toggle(*self.get_children())
+        self.tree.selection_toggle(*self.tree.get_children())
+
+
+def with_callback(method):
+    def wrapped(self, *args, **kwargs):
+        reactivate = self._active_
+        self._active_ = False
+        ret = method(self, *args, **kwargs)
+        if reactivate:
+            self._callback_()
+            self._active_ = True
+        return ret
+
+    return wrapped
 
 
 class CallbackMultiSelector(MultiSelector):
+    class CallbackMultiSelectorTree(MultiSelector.MultiSelectorTree):
+        @with_callback
+        def on_click(self, event):
+            return super().on_click(event)
+
     def __init__(self, *args, callback=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._callback_ = callback
+        self._active_ = False
+        super().__init__(
+            *args, cls=CallbackMultiSelector.CallbackMultiSelectorTree, **kwargs
+        )
+        self.tree._active_ = True
+        self.tree._callback_ = callback
         self._active_ = True
-    
-    @staticmethod
-    def with_callback(method):
-        def wrapped(self, *args, **kwargs):
-            reactivate = self._active_
-            self._active_ = False
-            method(self, *args, **kwargs)
-            if reactivate:
-                self._callback_()
-                self._active_ = True
-        return wrapped
+        self._callback_ = callback
 
     @with_callback
     def set_values(self, values):
         super().set_values(values)
-    
+
     @with_callback
     def set_selection(self, values):
         super().set_selection(values)
-    
+
     @with_callback
-    def selection_remove(self, *args, **kwargs):
-        super().selection_remove(*args, **kwargs)
-    
-    @with_callback
-    def selection_add(self, *args, **kwargs):
-        super().selection_add(*args, **kwargs)
-    
-    @with_callback
-    def selection_toggle(self, *args, **kwargs):
-        super().selection_toggle(*args, **kwargs)
-    
-    @with_callback    
     def select_all(self):
         super().select_all()
 
@@ -210,6 +228,7 @@ class CallbackMultiSelector(MultiSelector):
     @with_callback
     def select_toggle(self):
         super().select_toggle()
+
 
 class OptionalDropdown:
     """
@@ -228,8 +247,8 @@ class OptionalDropdown:
                 master=self.frame, values=json_value, interactive=False
             )
             self.dropdown.set(json_value[0])
-            self.label.pack(side="left")
-            self.dropdown.pack(side="left")
+            self.label.grid(row=0, column=0)
+            self.dropdown.grid(row=0, column=1)
         elif type_ is json.Value:
             self.single = json_value
         else:
@@ -241,9 +260,9 @@ class OptionalDropdown:
         else:
             return self.single
 
-    def pack(self, *args, **kwargs):
+    def grid(self, *args, **kwargs):
         if self.single is None:
-            self.frame.pack(*args, **kwargs)
+            self.frame.grid(*args, **kwargs)
         else:
             return self.SKIP
 
@@ -252,23 +271,57 @@ class TkSearchButton(common.AbstractKwargsProvider, ttk.Frame):
     def __init__(self, master):
         super().__init__(master=master)
         self.button = ttk.Button(master=self, text="Search")
-        self.mode_frame = ttk.Frame(self)
-        self.mode_label = ttk.Label(
-            master=self.mode_frame, text="criteria to fulfill: "
-        )
+        self.mode_label = ttk.Label(master=self, text="criteria to fulfill: ")
         self.mode_selector = Dropdown(
-            master=self.mode_frame, values=("All", "Any"), interactive=False
+            master=self, values=("All", "Any"), interactive=False
         )
-        self.button.pack(side="top")
-        self.mode_frame.pack(side="top")
-        self.mode_label.pack(side="left")
-        self.mode_selector.pack(side="left")
+        self.status_var = tk.StringVar()
+        self.status_var.set("")
+        self.status_label = ttk.Label(self, textvariable=self.status_var)
+        self.button.grid(row=0, column=0, columnspan=2, stick="ew")
+        self.mode_label.grid(row=1, column=0)
+        self.mode_selector.grid(row=1, column=1)
+        self.status_label.grid(row=2, column=0, columnspan=2)
+        for i in range(2):
+            self.columnconfigure(i, weight=1)
+        for i in range(3):
+            self.rowconfigure(i, weight=1)
 
     def get_kwargs(self):
         return {"operator": self.mode_selector.get()}
 
 
-class TkFieldGui(common.AbstractKwargsProvider, ttk.LabelFrame):
+class VisibilityMixin(ttk.Widget):
+    """
+    Class to make a Tk widget handle its visibility more easily
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.visible = False
+
+    def grid(self, *args, **kwargs):
+        super().grid(*args, **kwargs)
+        self.visible = True
+
+    def grid_remove(self, *args, **kwargs):
+        super().grid_remove(*args, **kwargs)
+        self.visible = False
+
+    def grid_forget(self, *args, **kwargs):
+        super().grid_forget(*args, **kwargs)
+        self.visible = False
+
+    def set_visible(self):
+        if not self.visible:
+            self.grid()
+
+    def set_invisible(self):
+        if self.visible:
+            self.grid_remove()
+
+
+class TkFieldGui(VisibilityMixin, common.AbstractKwargsProvider, ttk.LabelFrame):
     """
     Base class for the GUI of a single search field
     """
@@ -287,61 +340,47 @@ class TkFieldGui(common.AbstractKwargsProvider, ttk.LabelFrame):
         super().__init__(master, text=gui_data.name)
         self.gui_data = gui_data
         self.field = field
-        self.hidden = True
-        # self.label = ttk.Label(master=self, text=gui_data.name)
-        self.frame_config = ttk.Frame(self)
-        self.var_acceptNA = tk.BooleanVar(self.frame_config, value=True)
+        self.visible = True
+        self.frame_option = ttk.Frame(self)
+        self.var_acceptNA = tk.BooleanVar(self.frame_option, value=True)
         self.button_acceptNA = ttk.Checkbutton(
-            master=self.frame_config,
+            master=self.frame_option,
             text="accept N/A",
             onvalue=True,
             offvalue=False,
             variable=self.var_acceptNA,
         )
         self.var_acceptNA.set(True)
-        self.var_invert = tk.BooleanVar(self.frame_config, value=False)
+        self.var_invert = tk.BooleanVar(self.frame_option, value=False)
         self.button_invert = ttk.Checkbutton(
-            master=self.frame_config,
+            master=self.frame_option,
             text="invert",
             onvalue=True,
             offvalue=False,
             variable=self.var_invert,
         )
         self.var_invert.set(False)
-    
-    def show(self):
-        if self.hidden:
-            self.frame_config.pack(side="top", fill="x")
-            self.hidden = False
-    
-    def hide(self):
-        if not self.hidden:
-            self.frame_config.pack_forget()
-            self.hidden = True
+        self.frame_option.grid(row=0, column=0, sticky="ew")
+        self.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)
 
-    def pack_configs(self, widgets_groups, *, master=None):
-        """
-        Packs from left to right the option widgets, adding separator between groups
-        (typically lable+button or label+selector)
+    def add_to_grid(self, master, *widgets_groups, row=0, col=0):
+        for j, group in enumerate(widgets_groups):
+            for i, widget in enumerate(group):
+                success = widget.grid(row=row + 2 * j, column=col + 2 * i)
+                if success is not OptionalDropdown.SKIP:
+                    master.columnconfigure(col + 2 * i, weight=1)
+                    if i > 0:
+                        sep = ttk.Separator(master, orient=tk.VERTICAL)
+                        sep.grid(row=row + 2 * j, column=col + 2 * i - 1)
 
-        widgets_groups: an iterable of iterable of widgets
-        """
-        if master is None:
-            master = self.frame_config
-        previous = False
-        last_sep = None
-        for group in widgets_groups:
-            if previous:
-                last_sep = ttk.Separator(master=master, orient=tk.VERTICAL)
-                last_sep.pack(side="left", fill="y", expand=True)
-            previous = any(
-                [
-                    widget.pack(side="left", expand=True) is not OptionalDropdown.SKIP
-                    for widget in group
-                ]
-            )
-        if last_sep and not previous:
-            last_sep.pack_forget()
+    def notify_modes(self, modes: set[str]) -> bool:
+        if self.gui_data.modes is not None:
+            if modes & self.gui_data.modes:
+                self.set_visible()
+            else:
+                self.set_invisible()
+        return self.visible
 
     @classmethod
     def make(cls, master, gui_data: parsing.GuiDataBase, field: jsondb.FieldBase):
@@ -360,38 +399,30 @@ class TkOptionGui(TkFieldGui):
         self, master, gui_data: parsing.OptionGuiData, field: jsondb.OptionField
     ):
         super().__init__(master, gui_data, field)
-        # self.label.pack(side="top", fill="x", expand=True)
         self.ops_selector = OptionalDropdown(
-            master=self.frame_config, json_value=gui_data.operator, label="operation"
+            master=self.frame_option, json_value=gui_data.operator, label="operation"
         )
         if gui_data.multi_selection:
-            self.pack_configs([[self.button_acceptNA], [self.ops_selector]])
+            self.add_to_grid(
+                self.frame_option,
+                [self.button_acceptNA, self.button_invert, self.ops_selector],
+            )
             self.selector = MultiSelector(
                 values=gui_data.field_spec["values"], master=self, height=5
             )
             self.selector.select_all()
+            self.selector.grid(row=1, column=0, sticky="nesw")
         else:
-            self.pack_configs(
-                [[self.button_acceptNA], [self.button_invert], [self.ops_selector]]
+            self.add_to_grid(
+                self.frame_option,
+                [self.button_acceptNA, self.button_invert, self.ops_selector],
             )
             values = gui_data.field_spec["values"].copy()
             if field.optional:
                 values = [VALUE_ANY] + values
             self.selector = Dropdown(master=self, values=values, interactive=False)
-        self.show()
-    
-    def show(self):
-        if self.hidden:
-            super().show()
-            if self.gui_data.multiselection:
-                self.selector.pack(side="top", expand=True, fill="y")
-            else:
-                self.selector.pack(side="top")
-        
-    def hide(self):
-        if not self.hidden:
-            super().hide()
-            self.selector.pack_forget()
+            self.selector.grid(row=1, column=0)
+        self.rowconfigure(1, weight=1)
 
     def get_kwargs(self):
         args = {
@@ -421,14 +452,13 @@ class TkIntegerGui(TkFieldGui):
         self, master, gui_data: parsing.IntegerGuiData, field: jsondb.IntegerField
     ):
         super().__init__(master, gui_data, field)
-        # self.label.pack(side="top", fill="x", expand=True)
         self.comp_selector = OptionalDropdown(
-            master=self.frame_config, json_value=gui_data.comparison, label="comparison"
+            master=self.frame_option, json_value=gui_data.comparison, label="comparison"
         )
-        self.pack_configs(
-            [[self.button_acceptNA], [self.button_invert], [self.comp_selector]]
+        self.add_to_grid(
+            self.frame_option,
+            [self.button_acceptNA, self.button_invert, self.comp_selector],
         )
-        self.frame_config.pack(side="top")
         values = list(gui_data.listed)
         if field.optional:
             values = [VALUE_ANY] + values
@@ -437,17 +467,8 @@ class TkIntegerGui(TkFieldGui):
             self.selector.set(VALUE_ANY)
         else:
             self.selector.set(field.min_ or field.max_ or 0)
-        self.show()
-    
-    def show(self):
-        if self.hidden:
-            super().show()
-            self.selector.pack(side="top")
-    
-    def hide(self):
-        if not self.hidden:
-            super().hide()
-            self.selector.pack_forget()
+        self.selector.grid(row=1, column=0)
+        self.rowconfigure(1, weight=1)
 
     def get_kwargs(self):
         value = self.selector.get()
@@ -479,27 +500,15 @@ class TkTextGui(TkFieldGui):
             json_value=gui_data.operator,
             label="required lines:",
         )
-        self.selector = tk.Text(master=self, wrap="word", height=5, width=30)
-        # self.label.pack(side="top", fill="x", expand=True)
-        self.pack_configs([[self.button_acceptNA], [self.button_invert]])
-        self.pack_configs(
-            [[self.selector_case], [self.selector_mode]],
-            master=self.frame_config_selectors,
+        self.add_to_grid(self.frame_option, [self.button_acceptNA, self.button_invert])
+        self.add_to_grid(
+            self.frame_config_selectors, [self.selector_case, self.selector_mode]
         )
-        self.show()
-        
-    
-    def show(self):
-        if self.hidden:
-            super().show()
-            self.frame_config_selectors.pack(side="top", fill="x")
-            self.selector.pack(side="top", expand=True, fill="both")
-    
-    def hide(self):
-        if not self.hidden:
-            super().hide()
-            self.frame_config_selectors.pack_forget()
-            self.selector.pack_forget()
+        self.selector = tk.Text(master=self, wrap="word", height=5, width=30)
+        self.frame_config_selectors.grid(row=1, column=0)
+        self.selector.grid(row=2, column=0, sticky="nsew")
+        for i in range(1, 3):
+            self.rowconfigure(i, weight=1)
 
     def get_kwargs(self):
         text = self.selector.get("1.0", "end-1c")
@@ -515,6 +524,95 @@ class TkTextGui(TkFieldGui):
         }
 
 
+class VisibleSeparator(VisibilityMixin, ttk.Separator):
+    pass
+
+
+class TkNestedGui(VisibilityMixin, ttk.Frame):
+    """
+    Class for the nested GUI of search fields
+    """
+
+    def __init__(
+        self,
+        master,
+        parsed_file: parsing.ParsedFile,
+        nested_geometry: GeometryType,
+        axis: Literal["x", "y"],
+    ):
+        super().__init__(master)
+        self.nested_guis = []
+        self.separators = []
+        # Configure self on the axis
+        if axis == "x":
+            self.rowconfigure(0, weight=1)
+        else:
+            self.columnconfigure(0, weight=1)
+        # Analyze nested geometry
+        configure = self.columnconfigure if axis == "x" else self.rowconfigure
+        for i, element in enumerate(nested_geometry):
+            if isinstance(element, list):
+                new_gui = TkNestedGui(
+                    master=self,
+                    parsed_file=parsed_file,
+                    nested_geometry=element,
+                    axis="x" if axis == "y" else "y",
+                )
+            else:
+                new_gui = TkFieldGui.make(
+                    master=self,
+                    gui_data=parsed_file.gui_datas[element],
+                    field=parsed_file.database.fields[element],
+                )
+            # Add the new gui element (frame or actual Gui)
+            # to the grid
+            self.nested_guis.append(new_gui)
+            new_gui.grid(
+                row=0 if axis == "x" else 2 * i,
+                column=0 if axis == "y" else 2 * i,
+                sticky="nsew",
+            )
+            configure(2 * i, weight=1)
+            if i > 0:
+                sep = VisibleSeparator(
+                    self, orient=tk.HORIZONTAL if axis == "y" else tk.VERTICAL
+                )
+                sep.grid(
+                    row=0 if axis == "x" else 2 * i - 1,
+                    column=0 if axis == "y" else 2 * i - 1,
+                    sticky="ns" if axis == "x" else "ew",
+                )
+                new_gui.preceding_separator = sep
+                self.separators.append(sep)
+
+    def get_flat_gui_dict(self) -> dict[str, TkFieldGui]:
+        d = {
+            tk_field.gui_data.name: tk_field
+            for tk_field in self.nested_guis
+            if not isinstance(tk_field, TkNestedGui)
+        }
+        for inner in [ng for ng in self.nested_guis if isinstance(ng, TkNestedGui)]:
+            d |= inner.get_flat_gui_dict()
+        return d
+
+    def notify_modes(self, modes: set[str]) -> bool:
+        # dict respects insertion ordering
+        any_visible = False
+        for gui in self.nested_guis:
+            res = gui.notify_modes(modes)
+            if hasattr(gui, "preceding_separator"):
+                if res:
+                    gui.preceding_separator.set_visible()
+                else:
+                    gui.preceding_separator.set_invisible()
+            any_visible = any_visible or res
+        if any_visible:
+            self.set_visible()
+        else:
+            self.set_invisible()
+        return any_visible
+
+
 class TkHTMLDisplay(common.AbstractHTMLDisplay, tk_html.HTMLScrolledText):
     def display_html(self, html):
         self.set_html(html, strip=False)
@@ -523,8 +621,19 @@ class TkHTMLDisplay(common.AbstractHTMLDisplay, tk_html.HTMLScrolledText):
 class TkSearchCallback(common.AbstractSearchCallback):
     LOGGER = LOGGER
 
+    def __init__(self, *args, textvar=None, app=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.textvar = textvar
+        self.app = app
+
     def show_error(self, title="", message=""):
         tk.messagebox.showerror(title=title, message=message)
+
+    def set_status(self, msg):
+        if self.textvar is not None:
+            self.textvar.set("Status: " + msg)
+            if self.app is not None:
+                self.app.update()
 
 
 class TkNotebook(common.AbstractNotebook, ttk.Notebook):
@@ -533,9 +642,9 @@ class TkNotebook(common.AbstractNotebook, ttk.Notebook):
 
     def add_tab(self, tab, title=""):
         self.tabs_.append(tab)
-        self.add(tab.frame, text=title)
-        tab.frame.add(tab.search)
-        tab.frame.add(tab.display)
+        self.add(tab.frame_main, text=title)
+        tab.frame_main.add(tab.frame_search)
+        tab.frame_main.add(tab.display)
 
 
 class MainApp(common.AbstractMainApp, tk.Tk):
@@ -546,7 +655,9 @@ class MainApp(common.AbstractMainApp, tk.Tk):
     def __init__(self):
         super().__init__()
         s = ttk.Style()
-        s.configure("Sash", gripcount=10)
+        if "clam" in s.theme_names():
+            s.theme_use("clam")
+            s.configure("Sash", gripcount=25)
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
 
@@ -575,100 +686,78 @@ class MainApp(common.AbstractMainApp, tk.Tk):
         """
         Create a new tab
         """
-        tab = DotMap()
+        tab = DotMap(_dynamic=False)
         # Main frame
-        tab.frame = ttk.PanedWindow(self.notebook, orient=tk.HORIZONTAL)
-        # Search Area and Result Area
-        tab.search = ttk.Frame(tab.frame)
-        # Search Area content
-        ## Search Button
-        tab.search_frame = ttk.Frame(tab.search)
-        tab.search_button_gui = TkSearchButton(tab.search_frame)
+        tab.frame_main = ttk.PanedWindow(self.notebook, orient=tk.HORIZONTAL)
+        tab.frame_main.rowconfigure(0, weight=1)
+        for i in range(2):
+            tab.frame_main.columnconfigure(i, weight=1)
+        # Search Area
+        tab.frame_search = ttk.Frame(tab.frame_main)
+        tab.frame_search.columnconfigure(0, weight=1)
+        for i in range(2):
+            tab.frame_search.rowconfigure(i, weight=1)
+        ## Upper frame
+        tab.frame_search_upper = ttk.Frame(tab.frame_search)
+        tab.frame_search_upper.rowconfigure(0, weight=1)
+        for i in range(2):
+            tab.frame_search_upper.columnconfigure(i, weight=1)
+        tab.frame_search_upper.grid(row=0, column=0, sticky="nsew")
+        ### Mode selector (if any)
         tab.gui_dict = {}
-        if len(parsed_file.modes > 1):
-            tab.modes_selector = CallbackMultiSelector(
-                master=tab.search_frame,
-                values=parsed_file.modes,
-                callback=functools.partial(self.on_modes, tab)
+        tab.modes_selector = None
+        if len(parsed_file.modes) > 1:
+            tab.frame_mode = ttk.LabelFrame(
+                tab.frame_search_upper, text="Select active modes"
             )
+            tab.modes_selector = CallbackMultiSelector(
+                master=tab.frame_mode,
+                values=parsed_file.modes,
+                callback=functools.partial(self.on_modes, tab),
+            )
+            tab.modes_selector._active_ = False
             tab.modes_selector.select_all()
-            tab.modes_selector.pack(side="left", expand=True, fill="both")
-        tab.search_button_gui.pack(side="right", expand=True, fill="both")
-        tab.search_frame.pack(side="top", expand=True, fill="both")
+            tab.modes_selector._active_ = True
+            tab.modes_selector.grid(row=0, column=0, sticky="nsew")
+            tab.frame_mode.rowconfigure(0, weight=1)
+            tab.frame_mode.columnconfigure(0, weight=1)
+            tab.frame_mode.grid(row=0, column=0, sticky="nsew")
+        ### Search Button
+        tab.search_button = TkSearchButton(tab.frame_search_upper)
+        tab.search_button.grid(row=0, column=1, sticky="nsew")
+
         ## Search Fields
-        tab.gui_dict = self.make_guis(parsed_file, tab.search)
-        # Result Area Content
-        tab.display = TkHTMLDisplay(
-            master=tab.frame, wrap="word", state="disabled", width=-10
+        tab.nested_search_fields = TkNestedGui(
+            master=tab.frame_search,
+            parsed_file=parsed_file,
+            nested_geometry=parsed_file.gui_geometry,
+            axis="y",
         )
-        tab.search_button_gui.button.configure(
+        tab.nested_search_fields.grid(row=1, column=0, sticky="nsew")
+        tab.gui_dict = tab.nested_search_fields.get_flat_gui_dict()
+
+        # Result Area
+        tab.display = TkHTMLDisplay(
+            master=tab.frame_main, wrap="word", state="disabled", width=-10
+        )
+        tab.search_button.button.configure(
             command=TkSearchCallback(
                 parsed_file=parsed_file,
-                search_button=tab.search_button_gui,
+                search_button=tab.search_button,
                 gui_dict=tab.gui_dict,
                 display=tab.display,
+                modes_getter=tab.modes_selector.get_selection
+                if tab.modes_selector
+                else lambda: None,
+                textvar=tab.search_button.status_var,
+                app=self,
             )
         )
         return tab
-    
+
     def on_modes(self, tab):
         modes = set(tab.modes_selector.get_selection())
-        for gui in tab.gui_dict.values():
-            if gui.gui_data.modes is not None:
-                if modes & gui.gui_data.modes:
-                    gui.show()
-                else:
-                    gui.hide()
-
-    def make_guis(self, parsed_file: parsing.ParsedFile, search_frame: ttk.Frame):
-        return self.make_nested_guis(
-            parsed_file=parsed_file,
-            gui_dict={},
-            master_frame=search_frame,
-            side_id=0,
-            nested_geometry=parsed_file.gui_geometry,
-        )
-
-    def make_nested_guis(
-        self,
-        parsed_file: parsing.ParsedFile,
-        gui_dict,
-        master_frame,
-        side_id,
-        nested_geometry,
-    ):
-        for i, element in enumerate(nested_geometry):
-            if i > 0:
-                ttk.Separator(master_frame, orient=self.ORIENT[side_id]).pack(
-                    side=self.PACK_SIDES[side_id], expand=True, fill=self.FILL[side_id]
-                )
-            if isinstance(element, list):
-                sub_frame = ttk.Frame(master=master_frame)
-                self.make_nested_guis(
-                    parsed_file=parsed_file,
-                    gui_dict=gui_dict,
-                    master_frame=sub_frame,
-                    side_id=(side_id + 1) % 2,
-                    nested_geometry=element,
-                )
-                sub_frame.pack(
-                    side=self.PACK_SIDES[side_id],
-                    expand=True,
-                    fill="both",  # self.FILL[side_id]
-                )
-            else:
-                gui = TkFieldGui.make(
-                    master=master_frame,
-                    gui_data=parsed_file.gui_datas[element],
-                    field=parsed_file.database.fields[element],
-                )
-                gui.pack(
-                    side=self.PACK_SIDES[side_id],
-                    expand=True,
-                    fill="both",  # self.FILL[side_id]
-                )
-                gui_dict[element] = gui
-        return gui_dict
+        tab.nested_search_fields.notify_modes(modes)
 
     def start(self):
         self.geometry(

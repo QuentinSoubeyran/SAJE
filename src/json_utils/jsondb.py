@@ -10,12 +10,10 @@ A `Field` is a search option on the data, i.e. a test to do to select data fulfi
 certain criteria
 A `Database` represents an association of data and fields to search on that data
 """
-# Built-in modules
-import enum
 import copy
+import enum
 import warnings
 
-# Local modules
 from ..json_utils import jsonplus as json
 
 __author__ = "Quentin Soubeyran"
@@ -99,7 +97,7 @@ class FieldBase:
     def __init__(self, key, optional=True):
         """
         Create a new Field object to search through JSON-like objects
-        
+
         Args:
             key: the JSON path inside object that leads to the value this fields compares to
             optional: whether this field should always check or allows any item is no value is provided
@@ -119,7 +117,7 @@ class FieldBase:
                 json_obj that do *not* fullfil the tested property
             kwargs          : subclass-specific additionals arguments for the test. Usually
                 include `value` which is the value to test against
-        
+
         Returns:
             True if the object passes the test, false otherwise
         """
@@ -168,7 +166,7 @@ class FieldBase:
         Args:
             json_repr: the json object (object returns by json.load methods) representing this field
             data    : the list of elements this field will search on. Allows to take info from that
-        
+
         Returns:
             A object of a subclass of FieldBase as defined by the value of the `type` key of the object
         """
@@ -214,7 +212,7 @@ class OptionField(FieldBase):
         Args:
             json_value  : the json value to test (taken by FieldBase from the object to test)
             valid_values: either a single value, or a set of values as a ValueSet object
-        
+
         Return:
             True if json_value is (one of) the valid value, False otherwise
         """
@@ -365,7 +363,7 @@ class Database:
             operator (optional): the operator to use between the field return values
                 Operator.AND (default): all fields must be fullfilled
                 Operator.OR           : a single field suffice
-            
+
         Returns:
             A list of item from the data that fullfills the search
         """

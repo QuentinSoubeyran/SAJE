@@ -6,17 +6,16 @@ GUI program to search in JSON-formatted simple databases
 
 # WIP version 2
 
-# Built-in modules
+import argparse
 import logging
 import traceback
 from pathlib import Path
 
-# Local modules
-import src.version as version
-import src.utils as utils
+import src.backends as backends
 import src.json_utils.jsonplus as json
 import src.parsing as parsing
-import src.backends as backends
+import src.utils as utils
+import src.version as version
 
 __author__ = "Quentin Soubeyran"
 __copyright__ = "Copyright 2020, SAJE project"
@@ -94,17 +93,19 @@ class SAJE(backend.MainApp):
         basepath = self.ask_file()
         if not basepath:
             return
-        path = Path(basepath)
+        self.open(Path(basepath))
+
+    def open(self, filepath: Path):
         self.open_dir_cache = str(path.parent)
-        file_id = str(path.absolute())
+        file_id = str(filepath.absolute())
         if file_id not in self.cached_files:
             try:
-                with path.open("r", encoding="utf8") as f:
+                with filepath.open("r", encoding="utf8") as f:
                     json_file = json.load(f)
             except Exception as err:
                 LOGGER.error(
                     "Couldn't read file %s. Stacktrace:\n%s\n%s",
-                    str(path),
+                    str(filepath),
                     "".join(traceback.format_tb(err.__traceback__)),
                     utils.err_str(err),
                 )
@@ -116,7 +117,7 @@ class SAJE(backend.MainApp):
                 return
             try:
                 self.cached_files[file_id] = parsing.parse_file(
-                    json_file, filename=path.stem
+                    json_file, filename=filepath.stem
                 )
             except Exception as err:
                 LOGGER.error(
@@ -149,7 +150,18 @@ class SAJE(backend.MainApp):
         self.notebook.add_tab(tab, title=parsed_file.name)
 
 
-saje = SAJE()
-saje.set_title("SAJE: Search in Arbitrary Json Engine - v%s" % (version.__version__))
-saje.tk.call("tk", "scaling", 2.0)
-saje.start()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Runs the SAJE program")
+    parser.add_argument(
+        "files", nargs="*", type=Path, default=[], help="Files to immediately open"
+    )
+    args = parser.parse_args()
+    saje = SAJE()
+    saje.set_title(
+        "SAJE: Search in Arbitrary Json Engine - v%s" % (version.__version__)
+    )
+    saje.tk.call("tk", "scaling", 18.0)
+    for path in args.files:
+        if path.exists():
+            saje.open(path)
+    saje.start()

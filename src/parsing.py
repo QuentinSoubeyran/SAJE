@@ -3,15 +3,13 @@
 """
 Module for file parsing utilities of the SAJE project
 """
-# Built-in modules
-from collections import namedtuple
+import logging
 from abc import ABC, abstractmethod
-import warnings
+from collections import namedtuple
 
-# Local modules
 from . import version
-from .json_utils import jsonplus as json
 from .json_utils import jsondb
+from .json_utils import jsonplus as json
 from .utils import NocaseList, err_str
 
 __author__ = "Quentin Soubeyran"
@@ -21,12 +19,15 @@ __version__ = version.__version__
 __maintainer__ = "Quentin Soubeyran"
 __status__ = version.__status__
 
+LOGGER = logging.getLogger("SAJE.parsing")
+
 CACHE_KEY = "__CACHED_DISPLAY_STRING__"
 MISSING = object()
 MAYBE = object()
 
 ParsedFile = namedtuple(
-    "ParsedFile", ["name", "display_string", "gui_geometry", "gui_datas", "database", "modes"]
+    "ParsedFile",
+    ["name", "display_string", "gui_geometry", "gui_datas", "database", "modes"],
 )
 
 
@@ -51,21 +52,22 @@ class DisplayString(ABC):
         obj = None
         if json_obj is None:
             obj = DefaultDS()
-        type_ = json.Type(json_obj)
-        if type_ is json.Value:
-            obj = StringDS(json_obj)
-        elif type_ is json.Array:
-            obj = ArrayDS(json_obj)
-        elif type_ is json.Object:
-            json_kw = set(json_obj)
-            for keywords, class_ in cls.CLASSES:
-                if keywords & json_kw == keywords:
-                    obj = class_(json_obj)
-                    break
-            else:
-                raise ValueError(
-                    "No display_string object matches the keywords %s" % json_kw
-                )
+        else:
+            type_ = json.Type(json_obj)
+            if type_ is json.Value:
+                obj = StringDS(json_obj)
+            elif type_ is json.Array:
+                obj = ArrayDS(json_obj)
+            elif type_ is json.Object:
+                json_kw = set(json_obj)
+                for keywords, class_ in cls.CLASSES:
+                    if keywords & json_kw == keywords:
+                        obj = class_(json_obj)
+                        break
+                else:
+                    raise ValueError(
+                        "No display_string object matches the keywords %s" % json_kw
+                    )
         if obj is None:
             raise ValueError(
                 "Cannot parse display string definition:\n%s"
@@ -86,7 +88,7 @@ class DisplayString(ABC):
                 f"JSON VALUE:\n{json.dumps(json_obj, indent=4)}\n"
                 f"DISPLAY STRING DEF:\n{getattr(self, 'definition', '--Unknown--')}\n&gt;&gt;"
             )
-    
+
     @abstractmethod
     def _format(self, json_obj):
         """
@@ -133,21 +135,28 @@ class ArrayDS(DisplayString):
     def _format(self, json_obj):
         return "".join(ds.format(json_obj) for ds in self.display_strings)
 
-class IfKeyDS(DisplayString):
+
+class HasKeyDS(DisplayString):
     """
     Handles displaying conditional on the presence of a key
     """
 
-    KEYWORDS = {"if_key", "display_string"}
+    KEYWORDS = {"has_key", "yes"}
 
     def __init__(self, json_obj):
-        self.key = json_obj["if_key"]
-        self.display_string = self.from_json(json_obj["display_string"])
-    
+        self.key = json_obj["has_key"]
+        self.yes = self.from_json(json_obj["yes"])
+        self.no = None
+        if "no" in json_obj:
+            self.no = self.from_json(json_obj["no"])
+
     def _format(self, json_obj):
         if json.has(json_obj, self.key):
-            return self.display_string.format(json_obj)
+            return self.yes.format(json_obj)
+        elif self.no is not None:
+            return self.no.format(json_obj)
         return ""
+
 
 class JsonTypeDS(DisplayString):
     """
@@ -162,7 +171,7 @@ class JsonTypeDS(DisplayString):
             key: self.from_json(json_obj[key])
             for key in {"json_value", "json_array", "json_object"}
         }
-    
+
     def _format(self, json_obj):
         if json.has(json_obj, self.key):
             t = json.Type(json.get(json_obj, self.key))
@@ -173,6 +182,7 @@ class JsonTypeDS(DisplayString):
             elif t is json.Object:
                 return self.table["json_object"].format(json_obj)
         raise KeyError(self.key)
+
 
 class TableDS(DisplayString):
     """
@@ -200,9 +210,9 @@ class TableDS(DisplayString):
                 if value in self.table:
                     return self.table[value].format(json_obj)
             except Exception as err:
-                warnings.warn(
+                LOGGER.warn(
                     f"Encountered {err_str(err)} in Table Display String\n"
-                    f"JSON OBJECT:\n{json.dumps(json_obj, indent=4)}"
+                    f"JSON OBJECT:\n{json.dumps(json_obj, indent=4)}\n"
                     f"DISPLAY STRING DEF:\n{getattr(self, 'definition', '--unknonwn--')}"
                 )
         return self.table[""].format(json_obj)
@@ -223,10 +233,7 @@ class ForallDS(DisplayString):
     def _format(self, json_obj):
         t = json.Type(json_obj)
         if t is json.Array:
-            return self.sep.join(
-                self.display_string.format(e)
-                for e in json_obj
-            )
+            return self.sep.join(self.display_string.format(e) for e in json_obj)
         elif t is json.Object:
             if json.has(json_obj, self.key):
                 return self.sep.join(
@@ -263,7 +270,7 @@ def parse_file(json_file, filename):
         field_dict={}, field_geometry=[], field_nested_list=json_file["fields"]
     )
     fields = {name: gui_data.field_spec for name, gui_data in field_dict.items()}
-    modes = set.union(gui_data.modes or set() for gui_data in field_dict)
+    modes = set.union(*[gui_data.modes or set() for gui_data in field_dict.values()])
     return ParsedFile(
         name=json_file.get("name", filename),
         display_string=DisplayString.from_json(json_file.get("display_string")),
@@ -272,11 +279,8 @@ def parse_file(json_file, filename):
         database=jsondb.Database.from_json(
             {"fields": fields, "data": json_file["data"]}
         ),
-        modes=modes
+        modes=modes,
     )
-
-
-
 
 
 class GuiDataBase:
@@ -329,10 +333,10 @@ class GuiDataBase:
             default     : the default value.  Raise ValueError if default is `MISSING` and the json has not value for the specified key
             is_array   : `False`: value cannot be an array. `MAYBE`: value can be an Array of value. `True`: value must be as Array
             valid_values: the list of valid values, if any
-        
+
         Returns:
             Equivalent to json.pop(key)
-        
+
         Raises:
             TypeError if the type of the value is wrong
             ValueError if the value is not in valid_values

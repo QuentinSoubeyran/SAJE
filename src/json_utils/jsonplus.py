@@ -3,7 +3,6 @@
 """
 Small library that extends python's built-in json library with various utilities
 """
-# Built-in modules
 import enum
 from collections.abc import Mapping, Sequence
 from json import *
