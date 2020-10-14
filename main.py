@@ -11,6 +11,13 @@ import logging
 import traceback
 from pathlib import Path
 
+LOCAL_DIR = Path(__file__).parent
+logging.basicConfig(
+    filename=str(LOCAL_DIR / "saje.log"),
+    encoding="utf-8",
+    level=logging.DEBUG
+)
+
 import src.backends as backends
 import src.json_utils.jsonplus as json
 import src.parsing as parsing
@@ -25,7 +32,6 @@ __maintainer__ = "Quentin Soubeyran"
 __status__ = version.__status__
 
 LOGGER = logging.getLogger("SAJE")
-LOCAL_DIR = Path(__file__).parent
 CONFIG_FILE = LOCAL_DIR / "preferences.json"
 DEFAULT_PREFS = {"backend": backends.DEFAULT}
 
