@@ -96,7 +96,7 @@ class SAJE(backend.MainApp):
         self.open(Path(basepath))
 
     def open(self, filepath: Path):
-        self.open_dir_cache = str(path.parent)
+        self.open_dir_cache = str(filepath.parent)
         file_id = str(filepath.absolute())
         if file_id not in self.cached_files:
             try:
@@ -122,7 +122,7 @@ class SAJE(backend.MainApp):
             except Exception as err:
                 LOGGER.error(
                     "Couldn't parse file %s. Stacktrace:\n%s\n%s",
-                    str(path),
+                    str(filepath),
                     "".join(traceback.format_tb(err.__traceback__)),
                     utils.err_str(err),
                 )
@@ -138,7 +138,7 @@ class SAJE(backend.MainApp):
         except Exception as err:
             LOGGER.error(
                 "Couldn't create tab from file %s. Stacktrace:\n%s\n%s",
-                str(path),
+                str(filepath),
                 "".join(traceback.format_tb(err.__traceback__)),
                 utils.err_str(err),
             )
