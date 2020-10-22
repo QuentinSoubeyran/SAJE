@@ -661,9 +661,16 @@ class MainApp(common.AbstractMainApp, tk.Tk):
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
 
-        self.menu = tk.Menu(self)
-        self.menu.add_command(label="Open file", command=self.open_file)
-        self.config(menu=self.menu)
+        # Menu
+        self.menu_bar = tk.Menu(self)
+        self.config(menu=self.menu_bar)
+        # Menu - File
+        self.menu_file = tk.Menu(self.menu_bar)
+        self.menu_file.add_command(label="Open", command=self.open_file)
+        self.menu_bar.add_cascade(label="File", menu=self.menu_file)
+        # Shortcut
+        self.menu_bar.add_command(label="Open file", command=self.open_file)
+       
 
         self.notebook = TkNotebook(self)
         self.notebook.grid(column=0, row=0, sticky="nsew")
