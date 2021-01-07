@@ -166,7 +166,7 @@ if __name__ == "__main__":
     saje.set_title(
         "SAJE: Search in Arbitrary Json Engine - v%s" % (version.__version__)
     )
-    saje.tk.call("tk", "scaling", 18.0)
+    saje.tk.call("tk", "scaling", 1.0)
     for path in args.files:
         if path.exists():
             saje.open(path)
