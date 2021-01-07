@@ -33,7 +33,10 @@ __status__ = version.__status__
 
 LOGGER = logging.getLogger("SAJE")
 CONFIG_FILE = LOCAL_DIR / "preferences.json"
-DEFAULT_PREFS = {"backend": backends.DEFAULT}
+DEFAULT_PREFS = {
+    "backend": backends.DEFAULT,
+    "tkinter-scaling": 1.0
+}
 
 # Load GUI backend preferences
 if CONFIG_FILE.exists():
@@ -166,7 +169,7 @@ if __name__ == "__main__":
     saje.set_title(
         "SAJE: Search in Arbitrary Json Engine - v%s" % (version.__version__)
     )
-    saje.tk.call("tk", "scaling", 1.0)
+    saje.tk.call("tk", "scaling", PREFS["tkinter-scaling"])
     for path in args.files:
         if path.exists():
             saje.open(path)
